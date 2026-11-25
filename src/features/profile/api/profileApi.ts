@@ -1,5 +1,6 @@
 import {
   addMyFavorite,
+  adminListStaffNotifications,
   clearOtherDefaultAddresses,
   createMyAddress,
   createMyVehicle,
@@ -145,6 +146,11 @@ export async function toggleFavoriteRemote(
 }
 
 export async function fetchNotifications(): Promise<NotificationItem[]> {
+  const role = useAuthStore.getState().user?.role;
+  if (role === 'admin' || role === 'sub_admin') {
+    const { data } = await adminListStaffNotifications(dataConnect);
+    return data.notifications.map((n) => mapNotification({ ...n, userId: null }));
+  }
   const { data } = await listMyNotifications(dataConnect);
   return data.notifications.map(mapNotification);
 }

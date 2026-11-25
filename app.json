@@ -11,7 +11,10 @@
       "icon": "./assets/expo.icon",
       "infoPlist": {
         "ExpoLocalization_supportsRTL": true,
-        "ExpoLocalization_forcesRTL": true
+        "ExpoLocalization_forcesRTL": true,
+        "CFBundleLocalizations": [
+          "ar"
+        ]
       }
     },
     "android": {
@@ -21,7 +24,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.abanoubbekhiet.supermarketapp"
     },
     "web": {
       "output": "single",
@@ -43,7 +47,9 @@
         {
           "supportsRTL": true,
           "forcesRTL": true,
-          "supportedLocales": ["ar"]
+          "supportedLocales": [
+            "ar"
+          ]
         }
       ],
       "expo-notifications"

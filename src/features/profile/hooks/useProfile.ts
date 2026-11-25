@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '@/store/authStore';
 import {
   addAddress,
   addVehicle,
@@ -95,19 +96,25 @@ export function useToggleFavorite() {
 }
 
 export function useNotifications() {
+  const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: profileKeys.notifications,
+    queryKey: [...profileKeys.notifications, userId ?? 'guest'],
     queryFn: fetchNotifications,
-    refetchInterval: 20_000,
+    enabled: Boolean(userId),
+    refetchInterval: 8_000,
     refetchOnWindowFocus: true,
   });
 }
 
 export function useMarkAllNotificationsRead() {
   const qc = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id);
   return useMutation({
     mutationFn: markAllNotificationsRead,
-    onSuccess: (updated) => qc.setQueryData(profileKeys.notifications, updated),
+    onSuccess: (updated) => {
+      qc.setQueryData([...profileKeys.notifications, userId ?? 'guest'], updated);
+      void qc.invalidateQueries({ queryKey: profileKeys.notifications });
+    },
   });
 }
 

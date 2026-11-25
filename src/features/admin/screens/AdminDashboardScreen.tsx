@@ -63,7 +63,7 @@ export function AdminDashboardScreen() {
               className="font-body text-body-sm text-on-surface-subtle text-right"
               numberOfLines={1}
             >
-              {STRINGS.admin.welcomePrefix} {user?.name ?? 'سارة الشافعي'}
+              {STRINGS.admin.welcomePrefix} {user?.name ?? STRINGS.brand.adminTitle}
             </Text>
           </View>
         </View>

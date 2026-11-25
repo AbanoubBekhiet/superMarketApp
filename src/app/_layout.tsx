@@ -11,15 +11,16 @@ import {
   Tajawal_700Bold,
   useFonts as useTajawalFonts,
 } from '@expo-google-fonts/tajawal';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppErrorBoundary } from '@/components/ui/StateViews';
 import { ToastBanner } from '@/components/ui/ToastBanner';
+import { useNotifications } from '@/features/profile/hooks/useProfile';
 import {
   attachNotificationTapListener,
   configureNotifications,
@@ -28,11 +29,49 @@ import {
 import { queryClient } from '@/lib/queryClient';
 import { ensureForcedRtl } from '@/lib/rtl';
 import { useAuthStore } from '@/store/authStore';
+import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
 
 ensureForcedRtl();
 configureNotifications();
 SplashScreen.preventAutoHideAsync();
+
+function LiveNotificationWatcher() {
+  const user = useAuthStore((s) => s.user);
+  const showToast = useUiStore((s) => s.showToast);
+  const qc = useQueryClient();
+  const { data: notifications = [] } = useNotifications();
+  const seenIdsRef = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    seenIdsRef.current = null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || notifications.length === 0) return;
+    if (seenIdsRef.current === null) {
+      seenIdsRef.current = new Set(notifications.map((n) => n.id));
+      return;
+    }
+
+    const unseenNew = notifications.filter(
+      (n) => !n.isRead && !seenIdsRef.current?.has(n.id),
+    );
+    notifications.forEach((n) => seenIdsRef.current?.add(n.id));
+
+    if (unseenNew.length > 0) {
+      const latest = unseenNew[0];
+      showToast(`${latest.title}: ${latest.body}`);
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+      void qc.invalidateQueries({ queryKey: ['products'] });
+      void qc.invalidateQueries({ queryKey: ['banners'] });
+      void qc.invalidateQueries({ queryKey: ['customers'] });
+      void qc.invalidateQueries({ queryKey: ['admin'] });
+    }
+  }, [notifications, qc, showToast, user?.id]);
+
+  return null;
+}
 
 export default function RootLayout() {
   const [cairoLoaded] = useCairoFonts({
@@ -78,6 +117,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AppErrorBoundary>
+            <LiveNotificationWatcher />
             <StatusBar style="dark" />
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
               <Stack.Screen name="index" />

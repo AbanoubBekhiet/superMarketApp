@@ -16,6 +16,10 @@ export async function fetchCategories(): Promise<Category[]> {
   return mapCategories(data.categories);
 }
 
+function sameUuid(a: string, b: string): boolean {
+  return a.replace(/-/g, '').toLowerCase() === b.replace(/-/g, '').toLowerCase();
+}
+
 export async function createCategory(payload: {
   name: string;
   isActive: boolean;
@@ -26,9 +30,18 @@ export async function createCategory(payload: {
     imageUrl: 'local://cat-vegetables',
   });
   const list = await fetchCategories();
-  const created = list.find((c) => c.id === id);
-  if (!created) throw new Error('تعذر جلب القسم الجديد');
-  return created;
+  const created = list.find((c) => sameUuid(c.id, id));
+  if (created) return created;
+  return {
+    id: id.replace(/-/g, ''),
+    parentId: null,
+    name: payload.name,
+    imageKey: 'local://cat-vegetables',
+    productCount: 0,
+    sortOrder: 0,
+    isActive: payload.isActive,
+    subcategories: [],
+  };
 }
 
 export async function updateCategory(
@@ -36,20 +49,19 @@ export async function updateCategory(
   payload: Partial<{ name: string; isActive: boolean }>,
 ): Promise<Category> {
   const list = await fetchCategories();
-  const current = list.find((c) => c.id === id);
+  const current = list.find((c) => sameUuid(c.id, id));
   if (!current) throw new Error('القسم غير موجود');
 
   await callFunction<Record<string, unknown>, { id: string }>('upsertCategory', {
-    id,
+    id: current.id,
     name: payload.name ?? current.name,
     isActive: payload.isActive ?? current.isActive,
     imageUrl: current.imageKey,
     sortOrder: current.sortOrder ?? 0,
   });
 
-  const updated = (await fetchCategories()).find((c) => c.id === id);
-  if (!updated) throw new Error('القسم غير موجود');
-  return updated;
+  const updated = (await fetchCategories()).find((c) => sameUuid(c.id, id));
+  return updated ?? { ...current, ...payload };
 }
 
 export async function deleteCategory(id: string): Promise<void> {
