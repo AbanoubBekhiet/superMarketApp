@@ -16,6 +16,8 @@ export function useOrders(params: { customerId?: string; status?: string } = {})
   return useQuery({
     queryKey: orderKeys.list(params),
     queryFn: () => fetchOrders(params),
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
   });
 }
 

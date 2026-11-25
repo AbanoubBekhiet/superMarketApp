@@ -8,9 +8,9 @@ export default function IndexGate() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  if (user.role === 'admin') {
+  if (user.role === 'admin' || user.role === 'sub_admin') {
     return <Redirect href="/(admin)" />;
   }
 
-  return <Redirect href="/(user)" />;
+  return <Redirect href="/(user)/(tabs)" />;
 }

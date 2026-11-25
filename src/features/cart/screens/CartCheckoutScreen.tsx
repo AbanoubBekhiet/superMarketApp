@@ -11,18 +11,21 @@ import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { EmptyState } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useCreateOrder } from '@/features/orders/hooks/useOrders';
+import { validateCoupon } from '@/features/profile/api/profileApi';
 import { AddressPickerModal } from '@/features/profile/components/AddressPickerModal';
-import { useAddresses, useSetDefaultAddress } from '@/features/profile/hooks/useProfile';
+import {
+  useAddresses,
+  useAppSettings,
+  useSetDefaultAddress,
+} from '@/features/profile/hooks/useProfile';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { getLocalImage } from '@/lib/images';
-import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
 import type { PaymentMethod } from '@/types/domain';
 
 export function CartCheckoutScreen() {
-  const user = useAuthStore((s) => s.user);
   const items = useCartStore((s) => s.items);
   const discountAmount = useCartStore((s) => s.discountAmount);
   const promoCode = useCartStore((s) => s.promoCode);
@@ -31,12 +34,13 @@ export function CartCheckoutScreen() {
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
   const clearCart = useCartStore((s) => s.clearCart);
-  const applyPromo = useCartStore((s) => s.applyPromo);
+  const setPromoDiscount = useCartStore((s) => s.setPromoDiscount);
   const setDeliverySlot = useCartStore((s) => s.setDeliverySlot);
   const setPaymentMethod = useCartStore((s) => s.setPaymentMethod);
   const showToast = useUiStore((s) => s.showToast);
 
   const { data: addresses = [] } = useAddresses();
+  const { data: settings = [] } = useAppSettings();
   const { mutate: setDefaultAddress } = useSetDefaultAddress();
   const { mutateAsync: createOrder, isPending } = useCreateOrder();
 
@@ -45,44 +49,70 @@ export function CartCheckoutScreen() {
 
   const activeAddress = addresses.find((a) => a.isDefault) ?? addresses[0];
   const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-  const deliveryFee = items.length > 0 ? 20 : 0;
+  const baseDeliveryFee = Number(settings.find((s) => s.key === 'delivery_fee')?.value ?? '20');
+  const freeThreshold = Number(
+    settings.find((s) => s.key === 'free_delivery_threshold')?.value ?? '0',
+  );
+  const deliveryFee =
+    items.length > 0
+      ? freeThreshold > 0 && subtotal >= freeThreshold
+        ? 0
+        : baseDeliveryFee
+      : 0;
   const effectiveDiscount = items.length > 0 ? Math.min(discountAmount, subtotal) : 0;
   const total = Math.max(0, subtotal + deliveryFee - effectiveDiscount);
   const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
-  const handleApplyPromo = () => {
-    const ok = applyPromo(promoInput);
-    showToast(ok ? STRINGS.cart.promoApplied : STRINGS.cart.promoInvalid, ok ? 'success' : 'error');
+  const handleApplyPromo = async () => {
+    const code = promoInput.trim();
+    if (!code) {
+      setPromoDiscount(null, 0);
+      return;
+    }
+    try {
+      const coupon = await validateCoupon(code);
+      if (!coupon || subtotal < coupon.minOrder) {
+        showToast(STRINGS.cart.promoInvalid, 'error');
+        return;
+      }
+      const rawDiscount =
+        coupon.type === 'percentage' ? (subtotal * coupon.value) / 100 : coupon.value;
+      const capped = coupon.maxDiscount ? Math.min(rawDiscount, coupon.maxDiscount) : rawDiscount;
+      setPromoDiscount(coupon.code, Number(Math.min(capped, subtotal).toFixed(2)));
+      showToast(STRINGS.cart.promoApplied, 'success');
+    } catch {
+      showToast(STRINGS.cart.promoInvalid, 'error');
+    }
   };
 
   const handleConfirmOrder = async () => {
     if (items.length === 0) return;
-    await createOrder({
-      customerId: user?.id ?? 'usr-1',
-      customerName: user?.name ?? 'أحمد المنصوري',
-      customerArea: activeAddress?.area ?? 'سموحة',
-      customerAddress: activeAddress
-        ? `${activeAddress.street}، ${activeAddress.area}، ${activeAddress.city}`
-        : '14 شارع فوزي معاذ، سموحة، الإسكندرية',
-      items: items.map((i) => ({
-        productId: i.productId,
-        name: i.name,
-        unitLabel: i.unitLabel,
-        unitPrice: i.unitPrice,
-        quantity: i.quantity,
-        imageKey: i.imageKey,
-      })),
-      subtotal,
-      deliveryFee,
-      discount: effectiveDiscount,
-      total,
-      promoCode: promoCode ?? undefined,
-      deliverySlot,
-      paymentMethod,
-    });
-    clearCart();
-    showToast(STRINGS.cart.orderCreatedSuccess);
-    router.push('/(user)/(tabs)/orders');
+    if (!activeAddress) {
+      setAddressModalOpen(true);
+      showToast(STRINGS.home.chooseAddressTitle, 'error');
+      return;
+    }
+    try {
+      await createOrder({
+        addressId: activeAddress.id,
+        customerArea: activeAddress.area,
+        addressSnapshot: `${activeAddress.label} - ${activeAddress.street}، ${activeAddress.area}، ${activeAddress.city}`,
+        items: items.map((i) => ({
+          productId: i.productId,
+          weightOptionId: i.weightOptionId ?? undefined,
+          quantity: i.quantity,
+        })),
+        couponCode: promoCode ?? undefined,
+        deliverySlot,
+        paymentMethod,
+      });
+      clearCart();
+      showToast(STRINGS.cart.orderCreatedSuccess);
+      router.push('/(user)/(tabs)/orders');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : STRINGS.common.errorMessage;
+      showToast(msg || STRINGS.common.errorMessage, 'error');
+    }
   };
 
   return (

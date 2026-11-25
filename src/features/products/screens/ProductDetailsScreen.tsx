@@ -11,6 +11,7 @@ import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { ErrorState, ListSkeleton } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useProduct } from '@/features/products/hooks/useProducts';
+import { useFavoriteIds, useToggleFavorite } from '@/features/profile/hooks/useProfile';
 import { formatCurrency } from '@/lib/format';
 import { getLocalImage } from '@/lib/images';
 import { useCartStore } from '@/store/cartStore';
@@ -23,9 +24,13 @@ export function ProductDetailsScreen() {
   const { data: product, isLoading, isError, refetch } = useProduct(String(id ?? ''));
 
   const addItem = useCartStore((s) => s.addItem);
-  const favoriteIds = useCartStore((s) => s.favoriteIds);
-  const toggleFavorite = useCartStore((s) => s.toggleFavorite);
+  const { data: remoteFavIds = [] } = useFavoriteIds();
+  const { mutateAsync: toggleRemoteFav } = useToggleFavorite();
+  const localFavIds = useCartStore((s) => s.favoriteIds);
+  const toggleLocalFav = useCartStore((s) => s.toggleFavoriteLocal);
   const showToast = useUiStore((s) => s.showToast);
+
+  const favoriteIds = remoteFavIds.length > 0 ? remoteFavIds : localFavIds;
 
   const [selectedWeightId, setSelectedWeightId] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
@@ -53,9 +58,10 @@ export function ProductDetailsScreen() {
   const displayPrice = selectedWeight?.price ?? product.price;
   const displayOldPrice = selectedWeight?.oldPrice ?? product.oldPrice;
 
-  const handleToggleFav = () => {
-    const added = toggleFavorite(product.id);
+  const handleToggleFav = async () => {
+    const added = toggleLocalFav(product.id);
     showToast(added ? STRINGS.productDetails.favAdd : STRINGS.productDetails.favRemove);
+    await toggleRemoteFav({ productId: product.id, currentlyFavorite: isFav }).catch(() => undefined);
   };
 
   const handleAddToCart = () => {
@@ -63,7 +69,7 @@ export function ProductDetailsScreen() {
     addItem(
       {
         productId: product.id,
-        weightOptionId: selectedWeight?.id ?? product.id,
+        weightOptionId: selectedWeight?.id ?? null,
         name: `${product.name} (${unitLabel})`,
         imageKey: product.imageKey,
         unitLabel,

@@ -28,7 +28,7 @@ export function CategoriesScreen() {
   const selectedCategoryId =
     selection && selection.paramId === params.categoryId
       ? selection.categoryId
-      : (params.categoryId ?? 'cat-1');
+      : (params.categoryId ?? categories[0]?.id ?? '');
   const selectedSubcategoryId =
     selection && selection.paramId === params.categoryId ? selection.subcategoryId : 'all';
   const [searchOpen, setSearchOpen] = useState(false);

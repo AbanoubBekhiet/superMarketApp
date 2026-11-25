@@ -12,8 +12,8 @@ export default function AdminTabsLayout() {
   if (!user) {
     return <Redirect href="/(auth)/login" />;
   }
-  if (user.role !== 'admin') {
-    return <Redirect href="/(user)" />;
+  if (user.role !== 'admin' && user.role !== 'sub_admin') {
+    return <Redirect href="/(user)/(tabs)" />;
   }
 
   return (

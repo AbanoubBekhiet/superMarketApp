@@ -30,11 +30,11 @@ export function ProductCard({ product }: ProductCardProps) {
     const defaultWeight = product.weights[0];
     addItem({
       productId: product.id,
-      weightOptionId: defaultWeight?.id ?? product.id,
+      weightOptionId: defaultWeight?.id ?? null,
       name: `${product.name} (${product.unitLabel})`,
       imageKey: product.imageKey,
       unitLabel: product.unitLabel,
-      unitPrice: product.price,
+      unitPrice: defaultWeight?.price ?? product.price,
     });
     showToast(STRINGS.home.addedToCart);
   };

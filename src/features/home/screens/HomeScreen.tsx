@@ -14,6 +14,7 @@ import { AddressPickerModal } from '@/features/profile/components/AddressPickerM
 import { NotificationsModal } from '@/features/profile/components/NotificationsModal';
 import {
   useAddresses,
+  useBanners,
   useMarkAllNotificationsRead,
   useNotifications,
   useSetDefaultAddress,
@@ -56,6 +57,7 @@ export function HomeScreen() {
     refetch,
   } = useProducts(search.trim() ? { search: search.trim() } : {});
   const { data: addresses = [] } = useAddresses();
+  const { data: banners = [] } = useBanners();
   const { mutate: setDefaultAddress } = useSetDefaultAddress();
   const { data: notifications = [] } = useNotifications();
   const { mutate: markAllRead } = useMarkAllNotificationsRead();
@@ -170,83 +172,101 @@ export function HomeScreen() {
           </View>
         ) : (
           <>
-            {/* Promo Banner Carousel */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerClassName="gap-md"
-            >
-              <View
-                className="w-[330px] bg-primary rounded-lg overflow-hidden flex-row items-stretch"
-                style={{
-                  shadowColor: colors.primary,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.18,
-                  shadowRadius: 10,
-                  elevation: 3,
-                }}
+            {/* Promo Banner Carousel (Dynamic from DB banners table) */}
+            {banners.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerClassName="gap-md"
               >
-                <View className="flex-1 p-base justify-between gap-sm">
-                  <View className="gap-xs">
-                    <View className="self-start px-sm py-xs rounded-sm bg-mint-surface">
-                      <Text className="font-label text-label-sm text-on-mint-surface">
-                        {STRINGS.home.promoExclusiveTag}
-                      </Text>
+                {banners.map((banner, index) => {
+                  const isPrimaryCard = index % 2 === 0;
+                  return isPrimaryCard ? (
+                    <View
+                      key={banner.id}
+                      className="w-[330px] bg-primary rounded-lg overflow-hidden flex-row items-stretch"
+                      style={{
+                        shadowColor: colors.primary,
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.18,
+                        shadowRadius: 10,
+                        elevation: 3,
+                      }}
+                    >
+                      <View className="flex-1 p-base justify-between gap-sm">
+                        <View className="gap-xs">
+                          <View className="self-start px-sm py-xs rounded-sm bg-mint-surface">
+                            <Text className="font-label text-label-sm text-on-mint-surface">
+                              {banner.tag}
+                            </Text>
+                          </View>
+                          <Text className="font-headline text-headline-md text-on-primary text-right">
+                            {banner.title}
+                          </Text>
+                          <Text className="font-body text-body-sm text-on-primary text-right">
+                            {banner.subtitle}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() =>
+                            banner.categoryId
+                              ? router.push({
+                                  pathname: '/(user)/(tabs)/categories',
+                                  params: { categoryId: banner.categoryId },
+                                })
+                              : router.push('/(user)/(tabs)/categories')
+                          }
+                          className="self-start px-md py-xs rounded-md bg-mint-surface active:bg-soft-accent"
+                        >
+                          <Text className="font-label text-label-md text-on-mint-surface">
+                            {banner.ctaLabel}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      <View className="w-32 bg-mint-surface">
+                        <Image
+                          source={getLocalImage(banner.imageKey)}
+                          contentFit="cover"
+                          style={{ width: '100%', height: '100%' }}
+                          accessibilityLabel={banner.title}
+                        />
+                      </View>
                     </View>
-                    <Text className="font-headline text-headline-md text-on-primary text-right">
-                      {STRINGS.home.promoExclusiveTitle}
-                    </Text>
-                    <Text className="font-body text-body-sm text-on-primary text-right">
-                      {STRINGS.home.promoExclusiveDesc}
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => router.push('/(user)/(tabs)/categories')}
-                    className="self-start px-md py-xs rounded-md bg-mint-surface active:bg-soft-accent"
-                  >
-                    <Text className="font-label text-label-md text-on-mint-surface">
-                      {STRINGS.home.promoExclusiveCta}
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <View className="w-32 bg-mint-surface">
-                  <Image
-                    source={getLocalImage('promo-basket')}
-                    contentFit="cover"
-                    style={{ width: '100%', height: '100%' }}
-                    accessibilityLabel={STRINGS.home.promoExclusiveTitle}
-                  />
-                </View>
-              </View>
-
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: '/(user)/(tabs)/categories',
-                    params: { categoryId: 'cat-2' },
-                  })
-                }
-                className="w-[290px] bg-mint-surface border border-outline rounded-lg p-base justify-between gap-sm"
-              >
-                <View className="gap-xs">
-                  <View className="self-start px-sm py-xs rounded-sm bg-primary">
-                    <Text className="font-label text-label-sm text-on-primary">
-                      {STRINGS.home.promoBreakfastTag}
-                    </Text>
-                  </View>
-                  <Text className="font-headline text-headline-md text-on-mint-surface text-right">
-                    {STRINGS.home.promoBreakfastTitle}
-                  </Text>
-                  <Text className="font-body text-body-sm text-on-surface-muted text-right">
-                    {STRINGS.home.promoBreakfastDesc}
-                  </Text>
-                </View>
-                <Text className="font-label text-label-md text-primary text-right">
-                  {STRINGS.home.promoBreakfastCta}
-                </Text>
-              </Pressable>
-            </ScrollView>
+                  ) : (
+                    <Pressable
+                      key={banner.id}
+                      onPress={() =>
+                        banner.categoryId
+                          ? router.push({
+                              pathname: '/(user)/(tabs)/categories',
+                              params: { categoryId: banner.categoryId },
+                            })
+                          : router.push('/(user)/(tabs)/categories')
+                      }
+                      className="w-[290px] bg-mint-surface border border-outline rounded-lg p-base justify-between gap-sm"
+                    >
+                      <View className="gap-xs">
+                        <View className="self-start px-sm py-xs rounded-sm bg-primary">
+                          <Text className="font-label text-label-sm text-on-primary">
+                            {banner.tag}
+                          </Text>
+                        </View>
+                        <Text className="font-headline text-headline-md text-on-mint-surface text-right">
+                          {banner.title}
+                        </Text>
+                        <Text className="font-body text-body-sm text-on-surface-muted text-right">
+                          {banner.subtitle}
+                        </Text>
+                      </View>
+                      <Text className="font-label text-label-md text-primary text-right">
+                        {banner.ctaLabel}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
 
             {/* Categories Strip */}
             <View className="gap-md">

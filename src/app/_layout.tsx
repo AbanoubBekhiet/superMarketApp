@@ -20,7 +20,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppErrorBoundary } from '@/components/ui/StateViews';
 import { ToastBanner } from '@/components/ui/ToastBanner';
-import { configureNotifications } from '@/lib/notifications';
+import {
+  attachNotificationTapListener,
+  configureNotifications,
+  registerDevicePushToken,
+} from '@/lib/notifications';
 import { queryClient } from '@/lib/queryClient';
 import { ensureForcedRtl } from '@/lib/rtl';
 import { useAuthStore } from '@/store/authStore';
@@ -43,10 +47,19 @@ export default function RootLayout() {
 
   const hydrate = useAuthStore((s) => s.hydrate);
   const isHydrated = useAuthStore((s) => s.isHydrated);
+  const currentUser = useAuthStore((s) => s.user);
 
   useEffect(() => {
     hydrate();
+    return attachNotificationTapListener();
   }, [hydrate]);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      const isStaff = currentUser.role === 'admin' || currentUser.role === 'sub_admin';
+      void registerDevicePushToken(isStaff);
+    }
+  }, [currentUser?.id, currentUser?.role]);
 
   const fontsReady = cairoLoaded && tajawalLoaded;
 

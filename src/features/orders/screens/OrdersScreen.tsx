@@ -31,7 +31,7 @@ export function OrdersScreen() {
     isLoading,
     isError,
     refetch,
-  } = useOrders({ customerId: user?.id ?? 'usr-1' });
+  } = useOrders({ customerId: user?.id });
 
   const activeOrders = orders.filter(
     (o) => o.status === 'pending' || o.status === 'processing' || o.status === 'on_the_way',

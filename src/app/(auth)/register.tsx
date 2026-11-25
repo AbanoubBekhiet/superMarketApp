@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from 'expo-router';
-import { Lock, Mail, MapPin, Phone, User as UserIcon } from 'lucide-react-native';
+import { Lock, MapPin, Phone, User as UserIcon } from 'lucide-react-native';
 import { Controller, useForm } from 'react-hook-form';
 import {
   KeyboardAvoidingView,
@@ -17,13 +17,13 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { STRINGS } from '@/constants/strings';
 import { useMobileRegister } from '@/features/auth/hooks/useAuth';
+import { isValidPhoneNumber } from '@/lib/phoneAuth';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
 
 const registerSchema = z.object({
   name: z.string().trim().min(3, STRINGS.auth.validation.nameMin),
-  phone: z.string().trim().min(10, STRINGS.auth.validation.phoneInvalid),
-  email: z.string().trim().email(STRINGS.auth.validation.emailInvalid),
+  phone: z.string().trim().refine(isValidPhoneNumber, STRINGS.auth.validation.phoneInvalid),
   area: z.string().trim().min(2, STRINGS.auth.validation.areaMin),
   password: z.string().min(6, STRINGS.auth.validation.passwordMin),
 });
@@ -43,7 +43,6 @@ export default function RegisterScreen() {
     defaultValues: {
       name: '',
       phone: '',
-      email: '',
       area: 'سموحة، الإسكندرية',
       password: '',
     },
@@ -53,8 +52,9 @@ export default function RegisterScreen() {
     try {
       await register(values);
       showToast(STRINGS.auth.registerSuccess);
-    } catch {
-      showToast(STRINGS.common.errorMessage, 'error');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : STRINGS.common.errorMessage;
+      showToast(msg || STRINGS.common.errorMessage, 'error');
     }
   };
 
@@ -107,24 +107,6 @@ export default function RegisterScreen() {
                   keyboardType="phone-pad"
                   error={errors.phone?.message}
                   startIcon={<Phone size={18} color={colors.onSurfaceSubtle} />}
-                />
-              )}
-            />
-
-            <Controller
-              control={control}
-              name="email"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <Input
-                  label={STRINGS.auth.emailLabel}
-                  placeholder={STRINGS.auth.emailPlaceholder}
-                  value={value}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  error={errors.email?.message}
-                  startIcon={<Mail size={18} color={colors.onSurfaceSubtle} />}
                 />
               )}
             />

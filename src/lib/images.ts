@@ -23,9 +23,16 @@ export const LOCAL_IMAGES = {
 
 export type LocalImageKey = keyof typeof LOCAL_IMAGES;
 
-export function getLocalImage(key: string): number {
-  if (key in LOCAL_IMAGES) {
-    return LOCAL_IMAGES[key as LocalImageKey];
+export function getLocalImage(keyOrUrl?: string | null): number | { uri: string } {
+  if (!keyOrUrl) return LOCAL_IMAGES['prod-tomatoes'];
+  if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://')) {
+    return { uri: keyOrUrl };
+  }
+  const normalized = keyOrUrl.startsWith('local://')
+    ? keyOrUrl.replace('local://', '')
+    : keyOrUrl;
+  if (normalized in LOCAL_IMAGES) {
+    return LOCAL_IMAGES[normalized as LocalImageKey];
   }
   return LOCAL_IMAGES['prod-tomatoes'];
 }

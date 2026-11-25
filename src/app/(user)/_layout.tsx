@@ -8,7 +8,7 @@ export default function UserRootLayout() {
   if (!user) {
     return <Redirect href="/(auth)/login" />;
   }
-  if (user.role === 'admin') {
+  if (user.role === 'admin' || user.role === 'sub_admin') {
     return <Redirect href="/(admin)" />;
   }
 

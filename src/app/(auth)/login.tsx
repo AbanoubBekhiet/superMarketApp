@@ -17,12 +17,14 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { STRINGS } from '@/constants/strings';
 import { useMobileLogin } from '@/features/auth/hooks/useAuth';
+import { env } from '@/lib/env';
+import { isValidPhoneNumber } from '@/lib/phoneAuth';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
 import type { UserRole } from '@/types/domain';
 
 const loginSchema = z.object({
-  identifier: z.string().trim().min(3, STRINGS.common.requiredField),
+  phone: z.string().trim().refine(isValidPhoneNumber, STRINGS.auth.validation.phoneInvalid),
   password: z.string().min(6, STRINGS.auth.validation.passwordMin),
 });
 
@@ -39,8 +41,8 @@ export default function LoginScreen() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      identifier: 'ahmed@tazaj.eg',
-      password: 'password123',
+      phone: env.useEmulators ? '01024589120' : '',
+      password: env.useEmulators ? '123456' : '',
     },
   });
 
@@ -48,21 +50,23 @@ export default function LoginScreen() {
     try {
       await login(values);
       showToast(STRINGS.auth.loginSuccess);
-    } catch {
-      showToast(STRINGS.auth.invalidCredentials, 'error');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : STRINGS.auth.invalidCredentials;
+      showToast(msg || STRINGS.auth.invalidCredentials, 'error');
     }
   };
 
   const handleDemoLogin = async (role: UserRole) => {
     try {
       await login({
-        identifier: role === 'admin' ? 'admin@tazaj.eg' : 'ahmed@tazaj.eg',
-        password: 'password123',
+        phone: role === 'admin' ? '01000000001' : '01024589120',
+        password: role === 'admin' ? 'Admin123!' : '123456',
         role,
       });
       showToast(STRINGS.auth.loginSuccess);
-    } catch {
-      showToast(STRINGS.auth.invalidCredentials, 'error');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : STRINGS.auth.invalidCredentials;
+      showToast(msg || STRINGS.auth.invalidCredentials, 'error');
     }
   };
 
@@ -97,17 +101,17 @@ export default function LoginScreen() {
 
             <Controller
               control={control}
-              name="identifier"
+              name="phone"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label={`${STRINGS.auth.emailLabel} / ${STRINGS.auth.phoneLabel}`}
-                  placeholder={STRINGS.auth.emailPlaceholder}
+                  label={STRINGS.auth.phoneLabel}
+                  placeholder={STRINGS.auth.phonePlaceholder}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
                   autoCapitalize="none"
-                  keyboardType="email-address"
-                  error={errors.identifier?.message}
+                  keyboardType="phone-pad"
+                  error={errors.phone?.message}
                   startIcon={<Phone size={18} color={colors.onSurfaceSubtle} />}
                 />
               )}
@@ -152,26 +156,27 @@ export default function LoginScreen() {
             </View>
           </Card>
 
-          {/* Quick Role Demo Access */}
-          <Card className="gap-sm bg-mint-surface border-outline">
-            <Text className="font-title text-title-sm text-on-mint-surface text-right">
-              {STRINGS.auth.demoSectionTitle}
-            </Text>
-            <Button
-              variant="primary"
-              size="md"
-              label={STRINGS.auth.demoUserButton}
-              disabled={isPending}
-              onPress={() => handleDemoLogin('user')}
-            />
-            <Button
-              variant="outline"
-              size="md"
-              label={STRINGS.auth.demoAdminButton}
-              disabled={isPending}
-              onPress={() => handleDemoLogin('admin')}
-            />
-          </Card>
+          {env.useEmulators ? (
+            <Card className="gap-sm bg-mint-surface border-outline">
+              <Text className="font-title text-title-sm text-on-mint-surface text-right">
+                {STRINGS.auth.demoSectionTitle}
+              </Text>
+              <Button
+                variant="primary"
+                size="md"
+                label={STRINGS.auth.demoUserButton}
+                disabled={isPending}
+                onPress={() => handleDemoLogin('customer')}
+              />
+              <Button
+                variant="outline"
+                size="md"
+                label={STRINGS.auth.demoAdminButton}
+                disabled={isPending}
+                onPress={() => handleDemoLogin('admin')}
+              />
+            </Card>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@dataconnect/generated": "file:src/dataconnect-generated",
     "@expo-google-fonts/cairo": "^0.4.2",
     "@expo-google-fonts/tajawal": "^0.4.1",
     "@expo/ui": "~58.0.29",
@@ -27,6 +28,7 @@
     "expo-symbols": "~58.0.5",
     "expo-system-ui": "~58.0.7",
     "expo-web-browser": "~58.1.0",
+    "firebase": "^11.10.0",
     "lucide-react-native": "^1.79.0",
     "nativewind": "^4.2.7",
     "react": "19.3.0",

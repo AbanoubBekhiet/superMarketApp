@@ -20,9 +20,12 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { EmptyState } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useProducts } from '@/features/products/hooks/useProducts';
+import { updateProfileInfo } from '@/features/profile/api/profileApi';
 import {
   useAddAddress,
   useAddresses,
+  useAppSettings,
+  useFavoriteIds,
   useNotifications,
   useSetDefaultAddress,
 } from '@/features/profile/hooks/useProfile';
@@ -39,7 +42,10 @@ export function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
   const signOut = useAuthStore((s) => s.signOut);
-  const favoriteIds = useCartStore((s) => s.favoriteIds);
+  const localFavIds = useCartStore((s) => s.favoriteIds);
+  const { data: remoteFavIds = [] } = useFavoriteIds();
+  const favoriteIds = remoteFavIds.length > 0 ? remoteFavIds : localFavIds;
+  const { data: settings = [] } = useAppSettings();
   const showToast = useUiStore((s) => s.showToast);
 
   const { data: addresses = [] } = useAddresses();
@@ -49,17 +55,23 @@ export function ProfileScreen() {
   const { data: notifications = [] } = useNotifications();
 
   const [modal, setModal] = useState<ActiveModal>(null);
-  const [editName, setEditName] = useState(user?.name ?? 'أحمد المنصوري');
-  const [editPhone, setEditPhone] = useState(user?.phone ?? '+20 102 458 9120');
+  const [editName, setEditName] = useState(user?.name ?? '');
+  const [editPhone, setEditPhone] = useState(user?.phone ?? '');
 
   const [addrLabel, setAddrLabel] = useState('');
   const [addrStreet, setAddrStreet] = useState('');
   const [addrArea, setAddrArea] = useState('');
 
   const favoriteProducts = products.filter((p) => favoriteIds.includes(p.id));
+  const supportPhone =
+    settings.find((s) => s.key === 'support_phone')?.value ?? '+20 102 458 9120';
 
   const handleSaveProfile = async () => {
     if (!editName.trim()) return;
+    await updateProfileInfo({
+      fullName: editName.trim(),
+      phone: editPhone.trim() || undefined,
+    });
     await updateUser({ name: editName.trim(), phone: editPhone.trim() });
     showToast(STRINGS.profile.updatedSuccess);
     setModal(null);
@@ -117,9 +129,9 @@ export function ProfileScreen() {
     {
       key: 'support',
       title: STRINGS.profile.supportTitle,
-      subtitle: STRINGS.profile.supportSubtitle,
+      subtitle: supportPhone,
       Icon: Headset,
-      onPress: () => showToast(STRINGS.profile.supportNotice),
+      onPress: () => showToast(`${STRINGS.profile.supportNotice} (${supportPhone})`),
     },
   ] as const;
 

@@ -5,11 +5,11 @@ import { colors } from '@/theme/tokens';
 export default function AuthLayout() {
   const user = useAuthStore((s) => s.user);
 
-  if (user?.role === 'admin') {
+  if (user?.role === 'admin' || user?.role === 'sub_admin') {
     return <Redirect href="/(admin)" />;
   }
-  if (user?.role === 'user') {
-    return <Redirect href="/(user)" />;
+  if (user?.role === 'customer') {
+    return <Redirect href="/(user)/(tabs)" />;
   }
 
   return (
