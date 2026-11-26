@@ -28,8 +28,13 @@ export function useCreateCategory() {
 export function useUpdateCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<{ name: string; isActive: boolean }> }) =>
-      updateCategory(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Partial<{ name: string; isActive: boolean; imageUrl: string | null }>;
+    }) => updateCategory(id, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: categoryKeys.all }),
   });
 }

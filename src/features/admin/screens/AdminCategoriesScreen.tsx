@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Image } from 'expo-image';
-import { Plus, X } from 'lucide-react-native';
+import { ImagePlus, Pencil, Plus, Trash2, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
@@ -13,6 +13,10 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import {
+  reserveCategoryId,
+  uploadCategoryImageFromUri,
+} from '@/features/categories/api/categoriesApi';
+import {
   useCategories,
   useCreateCategory,
   useDeleteCategory,
@@ -20,6 +24,8 @@ import {
 } from '@/features/categories/hooks/useCategories';
 import { formatNumber } from '@/lib/format';
 import { getLocalImage } from '@/lib/images';
+import { pickAndUploadEntityImage } from '@/lib/imageUpload';
+import { deleteStorageImage } from '@/services/firebase/app';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
 import type { Category } from '@/types/domain';
@@ -36,10 +42,15 @@ export function AdminCategoriesScreen() {
   const { data: categories = [], isLoading, isError, refetch } = useCategories();
   const { mutateAsync: createCategory, isPending: isCreating } = useCreateCategory();
   const { mutateAsync: updateCategory, isPending: isUpdating } = useUpdateCategory();
-  const { mutateAsync: deleteCategory } = useDeleteCategory();
+  const { mutateAsync: deleteCategory, isPending: isDeleting } = useDeleteCategory();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
+  const [draftCategoryId, setDraftCategoryId] = useState<string>(() => reserveCategoryId());
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const {
     control,
@@ -53,24 +64,77 @@ export function AdminCategoriesScreen() {
 
   const openAdd = () => {
     setEditing(null);
+    setDraftCategoryId(reserveCategoryId());
+    setImageUrl(null);
+    setPreviewUri(null);
     reset({ name: '', isActive: true });
     setModalOpen(true);
   };
 
   const openEdit = (cat: Category) => {
     setEditing(cat);
+    setDraftCategoryId(cat.id);
+    setImageUrl(cat.imageKey);
+    setPreviewUri(null);
     reset({ name: cat.name, isActive: cat.isActive });
     setModalOpen(true);
   };
 
-  const onSubmit = async (values: CategoryForm) => {
-    if (editing) {
-      await updateCategory({ id: editing.id, payload: values });
-    } else {
-      await createCategory(values);
-    }
-    showToast(STRINGS.admin.categorySaved);
+  const closeModalWithoutClean = () => {
     setModalOpen(false);
+    setEditing(null);
+    setDraftCategoryId(reserveCategoryId());
+    setImageUrl(null);
+    setPreviewUri(null);
+  };
+
+  const handleCloseModal = () => {
+    if (imageUrl && imageUrl !== editing?.imageKey) {
+      void deleteStorageImage(imageUrl).catch(() => undefined);
+    }
+    closeModalWithoutClean();
+  };
+
+  const handlePickImage = () =>
+    pickAndUploadEntityImage({
+      previousSavedImageUrl: editing?.imageKey,
+      currentImageUrl: imageUrl,
+      resolveEntityId: () => {
+        const targetId = editing?.id || draftCategoryId || reserveCategoryId();
+        if (!editing?.id && !draftCategoryId) {
+          setDraftCategoryId(targetId);
+        }
+        return targetId;
+      },
+      uploadImage: uploadCategoryImageFromUri,
+      onPreview: setPreviewUri,
+      onUploadingChange: setIsUploadingImage,
+      onUploaded: setImageUrl,
+      onSuccess: () => showToast(STRINGS.admin.imageUploaded),
+      onError: (msg) => showToast(msg, 'error'),
+    });
+
+  const onSubmit = async (values: CategoryForm) => {
+    if (isUploadingImage) {
+      showToast(STRINGS.admin.uploadingImage);
+      return;
+    }
+    try {
+      const payload = {
+        ...values,
+        ...(imageUrl ? { imageUrl } : {}),
+      };
+      if (editing) {
+        await updateCategory({ id: editing.id, payload });
+      } else {
+        await createCategory({ id: draftCategoryId, ...payload });
+      }
+      showToast(STRINGS.admin.categorySaved);
+      closeModalWithoutClean();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : STRINGS.common.errorMessage;
+      showToast(msg || STRINGS.common.errorMessage, 'error');
+    }
   };
 
   const rows: Category[][] = [];
@@ -130,22 +194,19 @@ export function AdminCategoriesScreen() {
                   <View className="flex-row gap-xs pt-xs border-t border-outline-subtle">
                     <Pressable
                       onPress={() => openEdit(cat)}
-                      className="flex-1 py-xs rounded-sm bg-surface items-center"
+                      accessibilityRole="button"
+                      accessibilityLabel={STRINGS.common.edit}
+                      className="flex-1 py-xs rounded-sm bg-surface items-center justify-center active:bg-mint-surface"
                     >
-                      <Text className="font-label text-label-sm text-primary">
-                        {STRINGS.common.edit}
-                      </Text>
+                      <Pencil size={16} color={colors.primary} />
                     </Pressable>
                     <Pressable
-                      onPress={async () => {
-                        await deleteCategory(cat.id);
-                        showToast(STRINGS.admin.categoryDeleted);
-                      }}
-                      className="flex-1 py-xs rounded-sm bg-surface items-center"
+                      onPress={() => setDeletingCategory(cat)}
+                      accessibilityRole="button"
+                      accessibilityLabel={STRINGS.common.delete}
+                      className="flex-1 py-xs rounded-sm bg-surface items-center justify-center active:bg-error-container"
                     >
-                      <Text className="font-label text-label-sm text-error">
-                        {STRINGS.common.delete}
-                      </Text>
+                      <Trash2 size={16} color={colors.error} />
                     </Pressable>
                   </View>
                 </Card>
@@ -161,11 +222,11 @@ export function AdminCategoriesScreen() {
         visible={modalOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setModalOpen(false)}
+        onRequestClose={handleCloseModal}
       >
         <Pressable
           className="flex-1 bg-on-surface/40 justify-end"
-          onPress={() => setModalOpen(false)}
+          onPress={handleCloseModal}
         >
           <Pressable
             onPress={(e) => e.stopPropagation()}
@@ -175,7 +236,7 @@ export function AdminCategoriesScreen() {
               <Text className="font-headline text-title-lg text-on-surface">
                 {editing ? STRINGS.common.edit : STRINGS.admin.newCategoryBtn}
               </Text>
-              <Pressable onPress={() => setModalOpen(false)}>
+              <Pressable onPress={handleCloseModal}>
                 <X size={20} color={colors.onSurfaceMuted} />
               </Pressable>
             </View>
@@ -213,13 +274,97 @@ export function AdminCategoriesScreen() {
               )}
             />
 
+            <View className="flex-row items-center gap-md">
+              <View className="w-16 h-16 rounded-lg bg-mint-surface border border-outline overflow-hidden">
+                <Image
+                  source={getLocalImage(previewUri ?? imageUrl ?? editing?.imageKey ?? 'local://logo')}
+                  contentFit="cover"
+                  style={{ width: '100%', height: '100%' }}
+                  accessibilityLabel={editing?.name ?? STRINGS.admin.categoryNameLabel}
+                />
+              </View>
+              <Button
+                variant="mint"
+                size="md"
+                isLoading={isUploadingImage}
+                onPress={handlePickImage}
+                className="flex-1"
+              >
+                <ImagePlus size={16} color={colors.primary} />
+                <Text className="font-label-bold text-label-md text-on-mint-surface">
+                  {isUploadingImage
+                    ? STRINGS.admin.uploadingImage
+                    : imageUrl
+                      ? STRINGS.admin.changeImageBtn
+                      : STRINGS.admin.pickImageBtn}
+                </Text>
+              </Button>
+            </View>
+
             <Button
               variant="primary"
               size="lg"
-              isLoading={isCreating || isUpdating}
+              disabled={isUploadingImage}
+              isLoading={isCreating || isUpdating || isUploadingImage}
               label={STRINGS.common.save}
               onPress={() => handleSubmit(onSubmit)()}
             />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete Category Confirmation Modal */}
+      <Modal
+        visible={deletingCategory !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeletingCategory(null)}
+      >
+        <Pressable
+          className="flex-1 bg-on-surface/40 justify-center px-page-x"
+          onPress={() => setDeletingCategory(null)}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            className="bg-surface-card rounded-xl p-lg gap-md border border-outline-subtle"
+          >
+            <View className="flex-row items-center justify-between pb-sm border-b border-outline-subtle">
+              <Text className="font-headline text-title-lg text-on-surface">
+                {STRINGS.admin.confirmDeleteTitle}
+              </Text>
+              <Pressable onPress={() => setDeletingCategory(null)} hitSlop={8}>
+                <X size={20} color={colors.onSurfaceMuted} />
+              </Pressable>
+            </View>
+
+            <Text className="font-body text-body-md text-on-surface-muted text-right">
+              {deletingCategory
+                ? `هل أنت متأكد من حذف قسم «${deletingCategory.name}»؟ لا يمكن التراجع عن هذا الإجراء.`
+                : STRINGS.admin.confirmDeleteCategoryMsg}
+            </Text>
+
+            <View className="flex-row gap-sm pt-xs">
+              <Button
+                variant="danger"
+                size="md"
+                isLoading={isDeleting}
+                label={STRINGS.common.delete}
+                onPress={async () => {
+                  if (!deletingCategory) return;
+                  await deleteCategory(deletingCategory.id);
+                  showToast(STRINGS.admin.categoryDeleted);
+                  setDeletingCategory(null);
+                }}
+                className="flex-1"
+              />
+              <Button
+                variant="outline"
+                size="md"
+                label={STRINGS.common.cancel}
+                onPress={() => setDeletingCategory(null)}
+                className="flex-1"
+              />
+            </View>
           </Pressable>
         </Pressable>
       </Modal>

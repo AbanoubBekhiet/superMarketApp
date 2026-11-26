@@ -1,8 +1,13 @@
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { firestoreDb } from '@/services/firebase/app';
 import { useAuthStore } from '@/store/authStore';
 import {
   addAddress,
   addVehicle,
+  createBanner,
+  deleteBanner,
   fetchActiveBanners,
   fetchAddresses,
   fetchAppSettings,
@@ -14,6 +19,7 @@ import {
   setDefaultAddress,
   setDefaultVehicle,
   toggleFavoriteRemote,
+  updateAppSetting,
 } from '../api/profileApi';
 
 export const profileKeys = {
@@ -80,29 +86,67 @@ export function useRemoveVehicle() {
 }
 
 export function useFavoriteIds() {
+  const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: profileKeys.favorites,
+    queryKey: [...profileKeys.favorites, userId ?? 'guest'],
     queryFn: fetchFavoriteIds,
+    enabled: Boolean(userId),
   });
 }
 
 export function useToggleFavorite() {
   const qc = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id);
   return useMutation({
     mutationFn: ({ productId, currentlyFavorite }: { productId: string; currentlyFavorite: boolean }) =>
       toggleFavoriteRemote(productId, currentlyFavorite),
-    onSuccess: () => qc.invalidateQueries({ queryKey: profileKeys.favorites }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...profileKeys.favorites, userId ?? 'guest'] });
+      void qc.invalidateQueries({ queryKey: profileKeys.favorites });
+    },
   });
 }
 
 export function useNotifications() {
-  const userId = useAuthStore((s) => s.user?.id);
+  const user = useAuthStore((s) => s.user);
+  const userId = user?.id;
+  const role = user?.role;
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!userId) return undefined;
+
+    const isStaff = role === 'admin' || role === 'sub_admin';
+    const q = isStaff
+      ? query(
+          collection(firestoreDb, 'notifications'),
+          where('targetRole', '==', 'staff'),
+          orderBy('createdAt', 'desc'),
+          limit(40),
+        )
+      : query(
+          collection(firestoreDb, 'notifications'),
+          where('userId', '==', userId),
+          orderBy('createdAt', 'desc'),
+          limit(40),
+        );
+
+    const unsubscribe = onSnapshot(
+      q,
+      () => {
+        void qc.invalidateQueries({ queryKey: [...profileKeys.notifications, userId] });
+      },
+      () => undefined,
+    );
+
+    return () => unsubscribe();
+  }, [qc, role, userId]);
+
   return useQuery({
     queryKey: [...profileKeys.notifications, userId ?? 'guest'],
     queryFn: fetchNotifications,
     enabled: Boolean(userId),
-    refetchInterval: 8_000,
-    refetchOnWindowFocus: true,
+    staleTime: 60_000,
   });
 }
 
@@ -129,5 +173,30 @@ export function useAppSettings() {
   return useQuery({
     queryKey: profileKeys.settings,
     queryFn: fetchAppSettings,
+  });
+}
+
+export function useUpdateAppSetting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, value, description }: { key: string; value: string; description?: string }) =>
+      updateAppSetting(key, value, description),
+    onSuccess: () => qc.invalidateQueries({ queryKey: profileKeys.settings }),
+  });
+}
+
+export function useCreateBanner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createBanner,
+    onSuccess: () => qc.invalidateQueries({ queryKey: profileKeys.banners }),
+  });
+}
+
+export function useDeleteBanner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteBanner(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: profileKeys.banners }),
   });
 }

@@ -3,9 +3,11 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
+import { addDoc, collection, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { registerDevicePushToken } from '@/lib/notifications';
 import { normalizePhoneNumber, phoneToAuthEmail, sanitizePublicEmail } from '@/lib/phoneAuth';
-import { callFunction, firebaseAuth } from '@/services/firebase/app';
+import { firebaseAuth, firestoreDb } from '@/services/firebase/app';
+import type { FirestoreUserDoc } from '@/services/firebase/mappers';
 import type { AuthSession, UserRole } from '@/types/domain';
 
 export interface LoginPayload {
@@ -19,21 +21,9 @@ export interface RegisterPayload {
   phone: string;
   password: string;
   area: string;
-}
-
-interface SyncProfileResponse {
-  user: {
-    id: string;
-    firebaseUid: string;
-    fullName: string;
-    phone: string | null;
-    email: string | null;
-    avatarUrl: string | null;
-    role: UserRole;
-    isActive: boolean;
-    area: string;
-  };
-  claimsRefreshed: boolean;
+  street?: string;
+  latitude: number;
+  longitude: number;
 }
 
 function mapFirebaseAuthError(error: unknown): Error {
@@ -55,7 +45,7 @@ function mapFirebaseAuthError(error: unknown): Error {
     return new Error('محاولات تسجيل دخول كثيرة، يرجى المحاولة لاحقاً');
   }
   if (code === 'auth/network-request-failed') {
-    return new Error('تعذر الاتصال بخادم المصادقة. تأكد من تشغيل محاكيات Firebase واتصال الشبكة.');
+    return new Error('تعذر الاتصال بخادم المصادقة. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.');
   }
   if (error instanceof Error) return error;
   return new Error('حدث خطأ أثناء المصادقة');
@@ -66,35 +56,60 @@ export async function loginMobile(payload: LoginPayload): Promise<AuthSession> {
     const normalizedPhone = normalizePhoneNumber(payload.phone);
     const authEmail = phoneToAuthEmail(normalizedPhone);
     const credential = await signInWithEmailAndPassword(firebaseAuth, authEmail, payload.password);
-    const synced = await callFunction<Record<string, never>, SyncProfileResponse>(
-      'syncCurrentUserProfile',
-      {},
-    );
-    if (!synced.user.isActive) {
+    const uid = credential.user.uid;
+
+    const userRef = doc(firestoreDb, 'users', uid);
+    const snap = await getDoc(userRef);
+
+    let profile: FirestoreUserDoc;
+    if (!snap.exists()) {
+      const now = new Date().toISOString();
+      profile = {
+        firebaseUid: uid,
+        fullName: credential.user.displayName ?? 'عميل طازج',
+        phone: normalizedPhone,
+        email: null,
+        avatarUrl: 'avatar-ahmed',
+        role: 'customer',
+        isActive: true,
+        area: 'الإسكندرية',
+        deletedAt: null,
+        createdAt: now,
+      };
+      await setDoc(userRef, { id: uid, ...profile });
+    } else {
+      profile = snap.data() as FirestoreUserDoc;
+    }
+
+    if (!profile.isActive || profile.deletedAt) {
       await signOut(firebaseAuth);
       throw new Error('تم إيقاف هذا الحساب. يرجى التواصل مع الإدارة.');
     }
 
-    const tokenResult = await credential.user.getIdTokenResult(synced.claimsRefreshed);
-    const isStaff = synced.user.role === 'admin' || synced.user.role === 'sub_admin';
-    void registerDevicePushToken(isStaff);
+    await updateDoc(userRef, { lastLoginAt: new Date().toISOString() }).catch(() => undefined);
+
+    const token = await credential.user.getIdToken();
+    const isStaff = profile.role === 'admin' || profile.role === 'sub_admin';
+    void registerDevicePushToken(isStaff, uid);
 
     return {
-      token: tokenResult.token,
+      token,
       user: {
-        id: synced.user.id,
-        firebaseUid: synced.user.firebaseUid,
-        name: synced.user.fullName,
-        phone: synced.user.phone ?? normalizedPhone,
-        email: sanitizePublicEmail(synced.user.email),
-        role: synced.user.role,
-        status: synced.user.isActive ? 'active' : 'suspended',
-        isActive: synced.user.isActive,
-        avatarKey: synced.user.avatarUrl ?? 'avatar-ahmed',
-        area: synced.user.area,
+        id: uid,
+        firebaseUid: uid,
+        name: profile.fullName,
+        phone: profile.phone ?? normalizedPhone,
+        email: sanitizePublicEmail(profile.email ?? credential.user.email),
+        role: profile.role,
+        status: 'active',
+        isActive: true,
+        avatarKey: profile.avatarUrl ?? 'avatar-ahmed',
+        area: profile.area ?? 'الإسكندرية',
+        latitude: profile.latitude ?? null,
+        longitude: profile.longitude ?? null,
         ordersCount: 0,
         totalSpent: 0,
-        createdAt: new Date().toISOString(),
+        createdAt: profile.createdAt ?? new Date().toISOString(),
       },
     };
   } catch (err) {
@@ -111,34 +126,78 @@ export async function registerMobile(payload: RegisterPayload): Promise<AuthSess
       authEmail,
       payload.password,
     );
-    const res = await callFunction<
-      { fullName: string; phone: string; area: string },
-      { user: SyncProfileResponse['user'] }
-    >('registerCustomerProfile', {
-      fullName: payload.name.trim(),
+    const uid = credential.user.uid;
+    const now = new Date().toISOString();
+    const fullName = payload.name.trim();
+    const area = payload.area.trim();
+    const street = payload.street?.trim() || area;
+    const { latitude, longitude } = payload;
+
+    await setDoc(doc(firestoreDb, 'users', uid), {
+      id: uid,
+      firebaseUid: uid,
+      fullName,
       phone: normalizedPhone,
-      area: payload.area.trim(),
+      email: null,
+      avatarUrl: 'avatar-ahmed',
+      role: 'customer',
+      isActive: true,
+      area,
+      latitude,
+      longitude,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
     });
 
-    const token = await credential.user.getIdToken(true);
-    void registerDevicePushToken(false);
+    await addDoc(collection(firestoreDb, 'users', uid, 'addresses'), {
+      label: 'موقعي الحالي',
+      governorate: area,
+      city: area,
+      area,
+      street,
+      building: null,
+      floor: null,
+      apartment: null,
+      landmark: null,
+      latitude,
+      longitude,
+      isDefault: true,
+      deliveryNotes: null,
+    });
+
+    await addDoc(collection(firestoreDb, 'notifications'), {
+      userId: null,
+      targetRole: 'staff',
+      title: 'تسجيل عميل جديد',
+      body: `انضم العميل "${fullName}" (برقم ${normalizedPhone}) للتطبيق بنجاح.`,
+      type: 'admin_alert',
+      dataPayload: JSON.stringify({ customerId: uid, kind: 'new_customer' }),
+      isRead: false,
+      createdAt: now,
+    }).catch(() => undefined);
+
+    const token = await credential.user.getIdToken();
+    void registerDevicePushToken(false, uid);
 
     return {
       token,
       user: {
-        id: res.user.id,
-        firebaseUid: res.user.firebaseUid,
-        name: res.user.fullName,
-        phone: res.user.phone ?? normalizedPhone,
-        email: sanitizePublicEmail(res.user.email),
+        id: uid,
+        firebaseUid: uid,
+        name: fullName,
+        phone: normalizedPhone,
+        email: '',
         role: 'customer',
         status: 'active',
         isActive: true,
-        avatarKey: res.user.avatarUrl ?? 'avatar-ahmed',
-        area: res.user.area,
+        avatarKey: 'avatar-ahmed',
+        area,
+        latitude,
+        longitude,
         ordersCount: 0,
         totalSpent: 0,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
       },
     };
   } catch (err) {

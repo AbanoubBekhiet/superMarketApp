@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { ArrowUpDown, Search, SlidersHorizontal, X } from 'lucide-react-native';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FilterChip } from '@/components/ui/Chip';
@@ -11,6 +11,7 @@ import { useCategories } from '@/features/categories/hooks/useCategories';
 import { ProductCard } from '@/features/products/components/ProductCard';
 import { useProducts } from '@/features/products/hooks/useProducts';
 import { getLocalImage } from '@/lib/images';
+import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
 import type { Product } from '@/types/domain';
 
@@ -37,12 +38,16 @@ export function CategoriesScreen() {
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [offersOnly, setOffersOnly] = useState(false);
 
+  const showToast = useUiStore((s) => s.showToast);
+  const pendingCategoryToastRef = useRef<string | null>(null);
+
   const activeCategory =
     categories.find((c) => c.id === selectedCategoryId) ?? categories[0];
 
   const {
     data: products = [],
     isLoading,
+    isFetching,
     isError,
     refetch,
   } = useProducts({
@@ -51,6 +56,14 @@ export function CategoriesScreen() {
     search: search.trim() || undefined,
     sort,
   });
+
+  useEffect(() => {
+    if (!isLoading && !isFetching && pendingCategoryToastRef.current) {
+      const catName = pendingCategoryToastRef.current;
+      pendingCategoryToastRef.current = null;
+      showToast(`تم جلب منتجات قسم ${catName}`);
+    }
+  }, [activeCategory?.id, isFetching, isLoading, showToast]);
 
   const displayedProducts = offersOnly
     ? products.filter((p) => Boolean(p.discountPercent || p.oldPrice))
@@ -116,11 +129,16 @@ export function CategoriesScreen() {
                   <Pressable
                     key={cat.id}
                     onPress={() => {
-                      setSelection({
-                        paramId: params.categoryId,
-                        categoryId: cat.id,
-                        subcategoryId: 'all',
-                      });
+                      pendingCategoryToastRef.current = cat.name;
+                      if (cat.id === activeCategory?.id) {
+                        void refetch();
+                      } else {
+                        setSelection({
+                          paramId: params.categoryId,
+                          categoryId: cat.id,
+                          subcategoryId: 'all',
+                        });
+                      }
                     }}
                     className={`flex-1 bg-mint-surface rounded-lg p-sm items-center gap-xs ${
                       isSelected ? 'border-2 border-primary' : 'border border-outline'

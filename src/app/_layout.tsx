@@ -15,6 +15,7 @@ import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -28,6 +29,7 @@ import {
 } from '@/lib/notifications';
 import { queryClient } from '@/lib/queryClient';
 import { ensureForcedRtl } from '@/lib/rtl';
+import { firestoreDb } from '@/services/firebase/app';
 import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
@@ -46,6 +48,68 @@ function LiveNotificationWatcher() {
   useEffect(() => {
     seenIdsRef.current = null;
   }, [user?.id]);
+
+  useEffect(() => {
+    let bannersInit = true;
+    let settingsInit = true;
+    let productsInit = true;
+    let categoriesInit = true;
+
+    const unsubBanners = onSnapshot(
+      collection(firestoreDb, 'banners'),
+      () => {
+        if (bannersInit) {
+          bannersInit = false;
+          return;
+        }
+        void qc.invalidateQueries({ queryKey: ['banners'] });
+      },
+      () => undefined,
+    );
+
+    const unsubSettings = onSnapshot(
+      collection(firestoreDb, 'appSettings'),
+      () => {
+        if (settingsInit) {
+          settingsInit = false;
+          return;
+        }
+        void qc.invalidateQueries({ queryKey: ['app-settings'] });
+      },
+      () => undefined,
+    );
+
+    const unsubProducts = onSnapshot(
+      collection(firestoreDb, 'products'),
+      () => {
+        if (productsInit) {
+          productsInit = false;
+          return;
+        }
+        void qc.invalidateQueries({ queryKey: ['products'] });
+      },
+      () => undefined,
+    );
+
+    const unsubCategories = onSnapshot(
+      collection(firestoreDb, 'categories'),
+      () => {
+        if (categoriesInit) {
+          categoriesInit = false;
+          return;
+        }
+        void qc.invalidateQueries({ queryKey: ['categories'] });
+      },
+      () => undefined,
+    );
+
+    return () => {
+      unsubBanners();
+      unsubSettings();
+      unsubProducts();
+      unsubCategories();
+    };
+  }, [qc]);
 
   useEffect(() => {
     if (!user?.id || notifications.length === 0) return;
@@ -96,7 +160,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (currentUser?.id) {
       const isStaff = currentUser.role === 'admin' || currentUser.role === 'sub_admin';
-      void registerDevicePushToken(isStaff);
+      void registerDevicePushToken(isStaff, currentUser.id);
     }
   }, [currentUser?.id, currentUser?.role]);
 

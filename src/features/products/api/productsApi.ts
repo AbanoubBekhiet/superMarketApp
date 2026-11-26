@@ -1,10 +1,7 @@
-import {
-  adminListAllProducts,
-  getProductById,
-  listActiveProducts,
-} from '@/dataconnect-generated';
-import { callFunction, dataConnect } from '@/services/firebase/app';
-import { mapProduct } from '@/services/firebase/mappers';
+import { addDoc, collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
+import { uploadEntityImageUri } from '@/lib/imageUpload';
+import { deleteStorageImage, firestoreDb } from '@/services/firebase/app';
+import { mapProduct, type FirestoreProductDoc } from '@/services/firebase/mappers';
 import { useAuthStore } from '@/store/authStore';
 import type { Product } from '@/types/domain';
 
@@ -16,23 +13,58 @@ export interface ProductsFilterParams {
 }
 
 export interface QuickProductPayload {
+  id?: string;
   name: string;
   price: number;
-  stock: number;
+  stock?: number;
   categoryId?: string;
+  imageUrl?: string | null;
+}
+
+export function reserveProductId(): string {
+  return doc(collection(firestoreDb, 'products')).id;
+}
+
+export async function uploadProductImageFromUri(
+  productId: string,
+  uri: string,
+  mimeType = 'image/jpeg',
+  base64?: string | null,
+): Promise<string> {
+  return uploadEntityImageUri({
+    folder: 'products',
+    suffix: 'prod',
+    entityId: productId,
+    uri,
+    mimeType,
+    base64,
+    requireEntityId: true,
+  });
 }
 
 export async function fetchProducts(params: ProductsFilterParams = {}): Promise<Product[]> {
   const role = useAuthStore.getState().user?.role;
   const isStaff = role === 'admin' || role === 'sub_admin';
-  const categoryVar =
-    params.categoryId && params.categoryId !== 'all' ? params.categoryId : undefined;
 
-  const rawProducts = isStaff
-    ? (await adminListAllProducts(dataConnect, { categoryId: categoryVar })).data.products
-    : (await listActiveProducts(dataConnect, { categoryId: categoryVar })).data.products;
+  const [prodSnap, catSnap] = await Promise.all([
+    getDocs(collection(firestoreDb, 'products')),
+    getDocs(collection(firestoreDb, 'categories')),
+  ]);
 
-  let items = rawProducts.map(mapProduct);
+  const categoryMap = new Map<string, string>();
+  catSnap.docs.forEach((d) => {
+    const data = d.data() as { name?: string };
+    if (data.name) categoryMap.set(d.id, data.name);
+  });
+
+  let items = prodSnap.docs
+    .map((d) => ({ id: d.id, data: d.data() as FirestoreProductDoc }))
+    .filter(({ data }) => !data.deletedAt && (isStaff || data.isActive !== false))
+    .map(({ id, data }) => mapProduct(id, data, categoryMap));
+
+  if (params.categoryId && params.categoryId !== 'all') {
+    items = items.filter((p) => p.categoryId === params.categoryId);
+  }
 
   if (params.subcategoryId && params.subcategoryId !== 'all') {
     const subFiltered = items.filter((p) => p.subcategoryId === params.subcategoryId);
@@ -60,51 +92,117 @@ export async function fetchProducts(params: ProductsFilterParams = {}): Promise<
 }
 
 export async function fetchProductById(id: string): Promise<Product> {
-  const { data } = await getProductById(dataConnect, { id });
-  if (!data.product || data.product.deletedAt) {
+  const [snap, catSnap] = await Promise.all([
+    getDoc(doc(firestoreDb, 'products', id)),
+    getDocs(collection(firestoreDb, 'categories')),
+  ]);
+  if (!snap.exists()) {
     throw new Error('المنتج غير موجود');
   }
-  return mapProduct(data.product);
+  const data = snap.data() as FirestoreProductDoc;
+  if (data.deletedAt) {
+    throw new Error('المنتج غير موجود');
+  }
+  const categoryMap = new Map<string, string>();
+  catSnap.docs.forEach((d) => {
+    const catData = d.data() as { name?: string };
+    if (catData.name) categoryMap.set(d.id, catData.name);
+  });
+
+  return mapProduct(snap.id, data, categoryMap);
 }
 
 export async function createProduct(payload: QuickProductPayload): Promise<Product> {
-  const cats = await fetchProducts({});
-  const fallbackCategoryId = payload.categoryId ?? cats[0]?.categoryId;
+  const cats = await getDocs(collection(firestoreDb, 'categories'));
+  const fallbackCategoryId = payload.categoryId ?? cats.docs[0]?.id;
   if (!fallbackCategoryId) throw new Error('يرجى اختيار قسم');
 
+  const catDoc = cats.docs.find((c) => c.id === fallbackCategoryId);
+  const categoryName = (catDoc?.data() as { name?: string } | undefined)?.name ?? '';
+  const now = new Date().toISOString();
   const sku = `طز-${Math.floor(1000 + Math.random() * 9000)}`;
-  const { id } = await callFunction<Record<string, unknown>, { id: string }>('upsertProduct', {
+
+  const docPayload = {
     categoryId: fallbackCategoryId,
-    name: payload.name,
+    categoryName,
+    name: payload.name.trim(),
     sku,
+    brand: 'مزارع طازج',
+    description: '',
     price: payload.price,
-    stockQuantity: payload.stock,
+    salePrice: null,
+    stockQuantity: payload.stock ?? 1000,
+    lowStockThreshold: 10,
     unit: 'عبوة',
-    imageUrl: 'local://prod-tomatoes',
+    imageUrl: payload.imageUrl ?? 'local://logo',
     isActive: true,
-  });
-  return fetchProductById(id);
+    isFeatured: false,
+    isDailyOffer: false,
+    weights: [
+      {
+        id: `w-${Date.now()}`,
+        label: 'عبوة',
+        price: payload.price,
+        salePrice: null,
+        sortOrder: 0,
+        isDefault: true,
+      },
+    ],
+    deletedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const targetId = payload.id?.trim();
+  let createdId: string;
+  if (targetId) {
+    await setDoc(doc(firestoreDb, 'products', targetId), docPayload);
+    createdId = targetId;
+  } else {
+    const ref = await addDoc(collection(firestoreDb, 'products'), docPayload);
+    createdId = ref.id;
+  }
+
+  return fetchProductById(createdId);
 }
 
 export async function updateProduct(
   id: string,
   payload: Partial<QuickProductPayload>,
 ): Promise<Product> {
-  const current = await fetchProductById(id);
-  await callFunction<Record<string, unknown>, { id: string }>('upsertProduct', {
-    id,
-    categoryId: payload.categoryId ?? current.categoryId,
-    name: payload.name ?? current.name,
-    sku: current.sku,
-    price: payload.price ?? current.price,
-    stockQuantity: payload.stock ?? current.stock,
-    unit: current.stockUnit,
-    imageUrl: current.imageKey,
-    isActive: current.isActive ?? true,
+  const ref = doc(firestoreDb, 'products', id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('المنتج غير موجود');
+  const current = snap.data() as FirestoreProductDoc;
+
+  await updateDoc(ref, {
+    ...(payload.categoryId !== undefined ? { categoryId: payload.categoryId } : {}),
+    ...(payload.name !== undefined ? { name: payload.name.trim() } : {}),
+    ...(payload.price !== undefined ? { price: payload.price } : {}),
+    ...(payload.stock !== undefined ? { stockQuantity: payload.stock } : {}),
+    ...(payload.imageUrl !== undefined ? { imageUrl: payload.imageUrl } : {}),
+    updatedAt: new Date().toISOString(),
   });
+
+  if (payload.imageUrl !== undefined && current.imageUrl && payload.imageUrl !== current.imageUrl) {
+    void deleteStorageImage(current.imageUrl).catch(() => undefined);
+  }
+
   return fetchProductById(id);
 }
 
 export async function deleteProduct(id: string): Promise<void> {
-  await callFunction<{ id: string }, { deleted: boolean }>('softDeleteProduct', { id });
+  const ref = doc(firestoreDb, 'products', id);
+  const snap = await getDoc(ref);
+  const previousImageUrl = snap.exists() ? (snap.data() as FirestoreProductDoc).imageUrl : null;
+
+  await updateDoc(ref, {
+    deletedAt: new Date().toISOString(),
+    isActive: false,
+    updatedAt: new Date().toISOString(),
+  });
+
+  if (previousImageUrl) {
+    void deleteStorageImage(previousImageUrl).catch(() => undefined);
+  }
 }

@@ -2,7 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { RotateCcw } from 'lucide-react-native';
 import { useState } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui/StateViews
 import { STRINGS } from '@/constants/strings';
 import { OrderProgressTracker } from '@/features/orders/components/OrderProgressTracker';
 import { useOrders } from '@/features/orders/hooks/useOrders';
+import { useAppSettings } from '@/features/profile/hooks/useProfile';
 import { formatCurrency, formatNumber, formatShortDate } from '@/lib/format';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
@@ -32,6 +33,10 @@ export function OrdersScreen() {
     isError,
     refetch,
   } = useOrders({ customerId: user?.id });
+  const { data: settings = [] } = useAppSettings();
+  const currentFreeThreshold = Number(
+    settings.find((s) => s.key === 'free_delivery_threshold')?.value ?? '450',
+  ) || 0;
 
   const activeOrders = orders.filter(
     (o) => o.status === 'pending' || o.status === 'processing' || o.status === 'on_the_way',
@@ -41,13 +46,6 @@ export function OrdersScreen() {
   );
 
   const displayedOrders = activeTab === 'active' ? activeOrders : pastOrders;
-
-  const handleCallCourier = (order: Order) => {
-    if (order.courierPhone) {
-      Linking.openURL(`tel:${order.courierPhone}`).catch(() => {});
-    }
-    showToast(`${STRINGS.orders.callingCourierNotice} ${order.courierName ?? ''}`);
-  };
 
   const handleReorder = (order: Order) => {
     order.items.forEach((item) => {
@@ -68,6 +66,16 @@ export function OrdersScreen() {
   };
 
   const renderOrderItem = ({ item: order }: { item: Order }) => {
+    const threshold = order.freeDeliveryThreshold ?? currentFreeThreshold;
+    const deliveryNote =
+      order.deliveryFee === 0
+        ? threshold > 0
+          ? `التوصيل مجاني لأن قيمة الطلب (${formatCurrency(order.subtotal)}) تخطت ${formatCurrency(threshold)}`
+          : 'التوصيل مجاني'
+        : threshold > 0
+          ? `رسوم التوصيل ${formatCurrency(order.deliveryFee)} (قيمة الطلب أقل من ${formatCurrency(threshold)})`
+          : `رسوم التوصيل ${formatCurrency(order.deliveryFee)}`;
+
     if (activeTab === 'active') {
       return (
         <Card className="gap-base mb-md">
@@ -95,19 +103,18 @@ export function OrdersScreen() {
             </Text>
           </View>
 
-          <OrderProgressTracker status={order.status} etaMinutes={order.etaMinutes} />
-
-          <View className="flex-row items-center justify-between gap-sm pt-xs">
-            <Text className="font-body text-body-sm text-on-surface-muted">
-              {STRINGS.orders.courierLabel} {order.courierName ?? 'كريم محمود'}
+          <View className="gap-xs">
+            <Text className="font-body text-body-sm text-primary text-right">
+              {deliveryNote}
             </Text>
-            <Button
-              variant="mint"
-              size="sm"
-              label={STRINGS.orders.callCourier}
-              onPress={() => handleCallCourier(order)}
-            />
+            {order.discount > 0 ? (
+              <Text className="font-body text-body-sm text-primary text-right">
+                {`خصم كوبون${order.promoCode ? ` (${order.promoCode})` : ''}: - ${formatCurrency(order.discount)}`}
+              </Text>
+            ) : null}
           </View>
+
+          <OrderProgressTracker status={order.status} etaMinutes={order.etaMinutes} />
         </Card>
       );
     }
@@ -136,6 +143,15 @@ export function OrdersScreen() {
             label={STRINGS.orders.statusLabels[order.status]}
           />
         </View>
+
+        <Text className="font-body text-body-sm text-on-surface-muted text-right">
+          {deliveryNote}
+        </Text>
+        {order.discount > 0 ? (
+          <Text className="font-body text-body-sm text-primary text-right">
+            {`خصم كوبون${order.promoCode ? ` (${order.promoCode})` : ''}: - ${formatCurrency(order.discount)}`}
+          </Text>
+        ) : null}
 
         <View className="flex-row items-center justify-between gap-sm pt-sm border-t border-outline-subtle">
           <Text

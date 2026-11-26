@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { Clock, Home, Trash2, Zap } from 'lucide-react-native';
+import { Home, Trash2 } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,20 +23,15 @@ import { getLocalImage } from '@/lib/images';
 import { useCartStore } from '@/store/cartStore';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
-import type { PaymentMethod } from '@/types/domain';
 
 export function CartCheckoutScreen() {
   const items = useCartStore((s) => s.items);
   const discountAmount = useCartStore((s) => s.discountAmount);
   const promoCode = useCartStore((s) => s.promoCode);
-  const deliverySlot = useCartStore((s) => s.deliverySlot);
-  const paymentMethod = useCartStore((s) => s.paymentMethod);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
   const clearCart = useCartStore((s) => s.clearCart);
   const setPromoDiscount = useCartStore((s) => s.setPromoDiscount);
-  const setDeliverySlot = useCartStore((s) => s.setDeliverySlot);
-  const setPaymentMethod = useCartStore((s) => s.setPaymentMethod);
   const showToast = useUiStore((s) => s.showToast);
 
   const { data: addresses = [] } = useAddresses();
@@ -103,8 +98,8 @@ export function CartCheckoutScreen() {
           quantity: i.quantity,
         })),
         couponCode: promoCode ?? undefined,
-        deliverySlot,
-        paymentMethod,
+        deliverySlot: 'instant',
+        paymentMethod: 'cod',
       });
       clearCart();
       showToast(STRINGS.cart.orderCreatedSuccess);
@@ -225,10 +220,9 @@ export function CartCheckoutScreen() {
             />
           </View>
 
-          {/* Delivery & Payment Details */}
-          <Card className="gap-base">
-            {/* Address */}
-            <View className="flex-row items-center justify-between gap-sm pb-md border-b border-outline-subtle">
+          {/* Delivery Address */}
+          <Card>
+            <View className="flex-row items-center justify-between gap-sm">
               <View className="flex-row items-center gap-sm flex-1 min-w-0">
                 <View className="w-9 h-9 rounded-full bg-mint-surface items-center justify-center shrink-0">
                   <Home size={18} color={colors.primary} />
@@ -253,101 +247,6 @@ export function CartCheckoutScreen() {
                 </Text>
               </Pressable>
             </View>
-
-            {/* Time Slot */}
-            <View className="gap-sm">
-              <Text className="font-title text-title-sm text-on-surface text-right">
-                {STRINGS.cart.deliveryTime}
-              </Text>
-              <View className="flex-row gap-sm">
-                <Pressable
-                  onPress={() => setDeliverySlot('instant')}
-                  className={`flex-1 py-sm px-md rounded-md flex-row items-center justify-center gap-xs ${
-                    deliverySlot === 'instant'
-                      ? 'bg-mint-surface border-2 border-primary'
-                      : 'bg-surface border border-outline-subtle'
-                  }`}
-                >
-                  <Zap
-                    size={16}
-                    color={
-                      deliverySlot === 'instant' ? colors.primary : colors.onSurfaceMuted
-                    }
-                  />
-                  <Text
-                    className={`font-label text-label-md ${
-                      deliverySlot === 'instant'
-                        ? 'text-on-mint-surface'
-                        : 'text-on-surface-muted'
-                    }`}
-                  >
-                    {STRINGS.cart.instantDelivery}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setDeliverySlot('scheduled')}
-                  className={`flex-1 py-sm px-md rounded-md flex-row items-center justify-center gap-xs ${
-                    deliverySlot === 'scheduled'
-                      ? 'bg-mint-surface border-2 border-primary'
-                      : 'bg-surface border border-outline-subtle'
-                  }`}
-                >
-                  <Clock
-                    size={16}
-                    color={
-                      deliverySlot === 'scheduled' ? colors.primary : colors.onSurfaceMuted
-                    }
-                  />
-                  <Text
-                    className={`font-label text-label-md ${
-                      deliverySlot === 'scheduled'
-                        ? 'text-on-mint-surface'
-                        : 'text-on-surface-muted'
-                    }`}
-                  >
-                    {STRINGS.cart.scheduledDelivery}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Payment Method */}
-            <View className="gap-sm">
-              <Text className="font-title text-title-sm text-on-surface text-right">
-                {STRINGS.cart.paymentMethod}
-              </Text>
-              <View className="flex-row gap-xs">
-                {(
-                  [
-                    ['cod', STRINGS.cart.paymentCod],
-                    ['card', STRINGS.cart.paymentCard],
-                    ['wallet', STRINGS.cart.paymentWallet],
-                  ] as [PaymentMethod, string][]
-                ).map(([key, label]) => {
-                  const active = paymentMethod === key;
-                  return (
-                    <Pressable
-                      key={key}
-                      onPress={() => setPaymentMethod(key)}
-                      className={`flex-1 py-sm px-xs rounded-md items-center justify-center ${
-                        active
-                          ? 'bg-mint-surface border-2 border-primary'
-                          : 'bg-surface border border-outline-subtle'
-                      }`}
-                    >
-                      <Text
-                        className={`font-label text-label-sm text-center ${
-                          active ? 'text-on-mint-surface' : 'text-on-surface-muted'
-                        }`}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
           </Card>
 
           {/* Order Summary */}
@@ -368,16 +267,29 @@ export function CartCheckoutScreen() {
               </Text>
             </View>
 
-            <View className="flex-row items-center justify-between">
-              <Text className="font-body text-body-md text-on-surface-muted">
-                {STRINGS.cart.deliveryFee}
-              </Text>
-              <Text
-                className="font-label text-label-md text-on-surface"
-                style={{ fontVariant: ['tabular-nums'] }}
-              >
-                {formatCurrency(deliveryFee)}
-              </Text>
+            <View className="gap-xs">
+              <View className="flex-row items-center justify-between">
+                <Text className="font-body text-body-md text-on-surface-muted">
+                  {STRINGS.cart.deliveryFee}
+                </Text>
+                {freeThreshold > 0 && deliveryFee === 0 ? (
+                  <Badge variant="mint" label="توصيل مجاني" />
+                ) : (
+                  <Text
+                    className="font-label text-label-md text-on-surface"
+                    style={{ fontVariant: ['tabular-nums'] }}
+                  >
+                    {formatCurrency(deliveryFee)}
+                  </Text>
+                )}
+              </View>
+              {freeThreshold > 0 ? (
+                <Text className="font-body text-body-sm text-primary text-right">
+                  {deliveryFee === 0
+                    ? `التوصيل مجاني لأن قيمة طلبك تخطت ${formatCurrency(freeThreshold)}`
+                    : `التوصيل المجاني متاح للطلبات من ${formatCurrency(freeThreshold)} (متبقي ${formatCurrency(Math.max(0, freeThreshold - subtotal))})`}
+                </Text>
+              ) : null}
             </View>
 
             {effectiveDiscount > 0 ? (

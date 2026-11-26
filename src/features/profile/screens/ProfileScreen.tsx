@@ -8,10 +8,12 @@ import {
   Heart,
   LogOut,
   MapPin,
+  MessageCircle,
+  Phone,
   X,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -36,15 +38,27 @@ import { useCartStore } from '@/store/cartStore';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
 
-type ActiveModal = null | 'edit' | 'addresses' | 'favorites' | 'notifications';
+type ActiveModal = null | 'edit' | 'addresses' | 'favorites' | 'notifications' | 'support';
+
+function formatWhatsappDigits(rawPhone: string): string {
+  const digits = rawPhone.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('01') && digits.length === 11) {
+    return `2${digits}`;
+  }
+  if (digits.startsWith('00')) {
+    return digits.slice(2);
+  }
+  return digits;
+}
 
 export function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
   const signOut = useAuthStore((s) => s.signOut);
   const localFavIds = useCartStore((s) => s.favoriteIds);
-  const { data: remoteFavIds = [] } = useFavoriteIds();
-  const favoriteIds = remoteFavIds.length > 0 ? remoteFavIds : localFavIds;
+  const { data: remoteFavIds = [], isSuccess: favsLoaded } = useFavoriteIds();
+  const favoriteIds = favsLoaded ? remoteFavIds : localFavIds;
   const { data: settings = [] } = useAppSettings();
   const showToast = useUiStore((s) => s.showToast);
 
@@ -97,6 +111,32 @@ export function ProfileScreen() {
     showToast(STRINGS.auth.logoutSuccess);
   };
 
+  const handleCallSupport = async () => {
+    const cleanTel = supportPhone.replace(/\s+/g, '');
+    if (!cleanTel) {
+      showToast(STRINGS.profile.supportUnavailable, 'error');
+      return;
+    }
+    try {
+      await Linking.openURL(`tel:${cleanTel}`);
+    } catch {
+      showToast(STRINGS.profile.supportUnavailable, 'error');
+    }
+  };
+
+  const handleWhatsappSupport = async () => {
+    const waDigits = formatWhatsappDigits(supportPhone);
+    if (!waDigits) {
+      showToast(STRINGS.profile.supportUnavailable, 'error');
+      return;
+    }
+    try {
+      await Linking.openURL(`https://wa.me/${waDigits}`);
+    } catch {
+      showToast(STRINGS.profile.supportUnavailable, 'error');
+    }
+  };
+
   const menuRows = [
     {
       key: 'personal',
@@ -131,7 +171,7 @@ export function ProfileScreen() {
       title: STRINGS.profile.supportTitle,
       subtitle: supportPhone,
       Icon: Headset,
-      onPress: () => showToast(`${STRINGS.profile.supportNotice} (${supportPhone})`),
+      onPress: () => setModal('support'),
     },
   ] as const;
 
@@ -248,7 +288,9 @@ export function ProfileScreen() {
                     ? STRINGS.profile.savedAddresses
                     : modal === 'favorites'
                       ? STRINGS.profile.favorites
-                      : STRINGS.profile.notificationsOffers}
+                      : modal === 'support'
+                        ? STRINGS.profile.supportModalTitle
+                        : STRINGS.profile.notificationsOffers}
               </Text>
               <Pressable onPress={() => setModal(null)} hitSlop={8}>
                 <X size={20} color={colors.onSurfaceMuted} />
@@ -377,6 +419,36 @@ export function ProfileScreen() {
                   </View>
                 ))}
               </ScrollView>
+            ) : null}
+
+            {modal === 'support' ? (
+              <View className="gap-md">
+                <View className="p-md rounded-lg bg-surface border border-outline-subtle gap-xs items-center">
+                  <Text className="font-body text-body-md text-on-surface-muted text-center">
+                    {STRINGS.profile.supportModalSubtitle}
+                  </Text>
+                  <Text
+                    className="font-headline text-title-lg text-primary"
+                    style={{ writingDirection: 'ltr', fontVariant: ['tabular-nums'] }}
+                  >
+                    {supportPhone}
+                  </Text>
+                </View>
+
+                <Button variant="primary" size="lg" onPress={handleCallSupport}>
+                  <Phone size={18} color={colors.onPrimary} />
+                  <Text className="font-label-bold text-label-lg text-on-primary">
+                    {STRINGS.profile.supportCallPhone}
+                  </Text>
+                </Button>
+
+                <Button variant="mint-outline" size="lg" onPress={handleWhatsappSupport}>
+                  <MessageCircle size={18} color={colors.primary} />
+                  <Text className="font-label-bold text-label-lg text-primary">
+                    {STRINGS.profile.supportWhatsapp}
+                  </Text>
+                </Button>
+              </View>
             ) : null}
           </Pressable>
         </Pressable>

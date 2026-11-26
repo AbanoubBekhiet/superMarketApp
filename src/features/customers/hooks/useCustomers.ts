@@ -1,15 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { User, UserAccountStatus } from '@/types/domain';
-import { fetchCustomers, updateCustomerStatus } from '../api/customersApi';
+import {
+  fetchCustomerAddresses,
+  fetchCustomers,
+  updateCustomerStatus,
+} from '../api/customersApi';
 
 export const customerKeys = {
   all: ['customers'] as const,
+  addresses: (customerId: string) => ['customers', customerId, 'addresses'] as const,
 };
 
 export function useCustomers() {
   return useQuery({
     queryKey: customerKeys.all,
     queryFn: fetchCustomers,
+  });
+}
+
+export function useCustomerAddresses(customerId: string | null) {
+  return useQuery({
+    queryKey: customerKeys.addresses(customerId ?? ''),
+    queryFn: () => fetchCustomerAddresses(customerId!),
+    enabled: Boolean(customerId),
   });
 }
 

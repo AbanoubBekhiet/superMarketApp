@@ -20,6 +20,8 @@ export interface User {
   isActive: boolean;
   avatarKey?: string;
   area: string;
+  latitude?: number | null;
+  longitude?: number | null;
   ordersCount: number;
   totalSpent: number;
   lastOrderCode?: string;
@@ -121,6 +123,17 @@ export interface CartItem {
   quantity: number;
 }
 
+export interface ActiveCart {
+  userId: string;
+  customerName: string;
+  customerPhone: string;
+  customerArea: string;
+  items: CartItem[];
+  itemsCount: number;
+  subtotal: number;
+  updatedAt: string;
+}
+
 export interface Coupon {
   id: string;
   code: string;
@@ -196,6 +209,7 @@ export interface Order {
   items: OrderItem[];
   subtotal: number;
   deliveryFee: number;
+  freeDeliveryThreshold?: number;
   discount: number;
   total: number;
   promoCode?: string;

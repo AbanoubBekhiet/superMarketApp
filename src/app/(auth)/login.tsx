@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Image } from 'expo-image';
 import { Link } from 'expo-router';
-import { Leaf, Lock, Phone } from 'lucide-react-native';
+import { Lock, Phone } from 'lucide-react-native';
 import { Controller, useForm } from 'react-hook-form';
 import {
   KeyboardAvoidingView,
@@ -17,11 +18,10 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { STRINGS } from '@/constants/strings';
 import { useMobileLogin } from '@/features/auth/hooks/useAuth';
-import { env } from '@/lib/env';
+import { getLocalImage } from '@/lib/images';
 import { isValidPhoneNumber } from '@/lib/phoneAuth';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
-import type { UserRole } from '@/types/domain';
 
 const loginSchema = z.object({
   phone: z.string().trim().refine(isValidPhoneNumber, STRINGS.auth.validation.phoneInvalid),
@@ -41,28 +41,14 @@ export default function LoginScreen() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      phone: env.useEmulators ? '01024589120' : '',
-      password: env.useEmulators ? '123456' : '',
+      phone: '',
+      password: '',
     },
   });
 
   const onSubmit = async (values: LoginFormValues) => {
     try {
       await login(values);
-      showToast(STRINGS.auth.loginSuccess);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : STRINGS.auth.invalidCredentials;
-      showToast(msg || STRINGS.auth.invalidCredentials, 'error');
-    }
-  };
-
-  const handleDemoLogin = async (role: UserRole) => {
-    try {
-      await login({
-        phone: role === 'admin' ? '01000000001' : '01024589120',
-        password: role === 'admin' ? 'Admin123!' : '123456',
-        role,
-      });
       showToast(STRINGS.auth.loginSuccess);
     } catch (err) {
       const msg = err instanceof Error ? err.message : STRINGS.auth.invalidCredentials;
@@ -82,8 +68,13 @@ export default function LoginScreen() {
         >
           {/* Brand Header */}
           <View className="items-center gap-sm">
-            <View className="w-16 h-16 rounded-xl bg-primary items-center justify-center">
-              <Leaf size={32} color={colors.onPrimary} />
+            <View className="w-16 h-16 rounded-xl overflow-hidden border border-outline-subtle bg-surface-card">
+              <Image
+                source={getLocalImage('local://logo')}
+                contentFit="cover"
+                style={{ width: '100%', height: '100%' }}
+                accessibilityLabel={STRINGS.brand.name}
+              />
             </View>
             <Text className="font-headline text-display-lg-mobile text-on-surface">
               {STRINGS.brand.name}
@@ -156,27 +147,7 @@ export default function LoginScreen() {
             </View>
           </Card>
 
-          {env.useEmulators ? (
-            <Card className="gap-sm bg-mint-surface border-outline">
-              <Text className="font-title text-title-sm text-on-mint-surface text-right">
-                {STRINGS.auth.demoSectionTitle}
-              </Text>
-              <Button
-                variant="primary"
-                size="md"
-                label={STRINGS.auth.demoUserButton}
-                disabled={isPending}
-                onPress={() => handleDemoLogin('customer')}
-              />
-              <Button
-                variant="outline"
-                size="md"
-                label={STRINGS.auth.demoAdminButton}
-                disabled={isPending}
-                onPress={() => handleDemoLogin('admin')}
-              />
-            </Card>
-          ) : null}
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

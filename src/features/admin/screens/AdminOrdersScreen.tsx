@@ -11,6 +11,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useOrders, useUpdateOrderStatus } from '@/features/orders/hooks/useOrders';
+import { useAppSettings } from '@/features/profile/hooks/useProfile';
 import { formatCurrency, formatDateTime, formatNumber } from '@/lib/format';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
@@ -43,7 +44,11 @@ export function AdminOrdersScreen() {
     isError,
     refetch,
   } = useOrders({ status: statusFilter });
+  const { data: settings = [] } = useAppSettings();
   const { mutateAsync: updateStatus, isPending: isUpdating } = useUpdateOrderStatus();
+
+  const currentFreeThreshold =
+    Number(settings.find((s) => s.key === 'free_delivery_threshold')?.value ?? '450') || 0;
 
   const activeCount = orders.filter(
     (o) => o.status === 'pending' || o.status === 'processing' || o.status === 'on_the_way',
@@ -208,6 +213,56 @@ export function AdminOrdersScreen() {
                         </Text>
                       </View>
                     ))}
+                  </View>
+
+                  <View className="gap-xs border-t border-outline-subtle pt-sm bg-surface p-md rounded-md">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="font-body text-body-sm text-on-surface-muted">
+                        {STRINGS.cart.subtotal}
+                      </Text>
+                      <Text className="font-label text-label-md text-on-surface" style={{ fontVariant: ['tabular-nums'] }}>
+                        {formatCurrency(selectedOrder.subtotal)}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center justify-between">
+                      <Text className="font-body text-body-sm text-on-surface-muted">
+                        {STRINGS.cart.deliveryFee}
+                      </Text>
+                      <Text className="font-label text-label-md text-on-surface" style={{ fontVariant: ['tabular-nums'] }}>
+                        {selectedOrder.deliveryFee === 0
+                          ? 'مجاني'
+                          : formatCurrency(selectedOrder.deliveryFee)}
+                      </Text>
+                    </View>
+                    {(() => {
+                      const threshold = selectedOrder.freeDeliveryThreshold ?? currentFreeThreshold;
+                      if (threshold <= 0) return null;
+                      return (
+                        <Text className="font-body text-body-sm text-primary text-right">
+                          {selectedOrder.deliveryFee === 0
+                            ? `توصيل مجاني لأن قيمة الطلب (${formatCurrency(selectedOrder.subtotal)}) وصلت لحد ${formatCurrency(threshold)}`
+                            : `تم احتساب رسوم التوصيل لأن قيمة الطلب (${formatCurrency(selectedOrder.subtotal)}) أقل من ${formatCurrency(threshold)}`}
+                        </Text>
+                      );
+                    })()}
+                    {selectedOrder.discount > 0 ? (
+                      <View className="flex-row items-center justify-between">
+                        <Text className="font-body text-body-sm text-primary">
+                          {`خصم كوبون${selectedOrder.promoCode ? ` (${selectedOrder.promoCode})` : ''}`}
+                        </Text>
+                        <Text className="font-label text-label-md text-primary" style={{ fontVariant: ['tabular-nums'] }}>
+                          - {formatCurrency(selectedOrder.discount)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View className="flex-row items-center justify-between pt-xs border-t border-outline-subtle">
+                      <Text className="font-headline text-title-sm text-on-surface">
+                        {STRINGS.cart.total}
+                      </Text>
+                      <Text className="font-headline text-title-md text-primary" style={{ fontVariant: ['tabular-nums'] }}>
+                        {formatCurrency(selectedOrder.total)}
+                      </Text>
+                    </View>
                   </View>
 
                   <View className="gap-sm border-t border-outline-subtle pt-sm">

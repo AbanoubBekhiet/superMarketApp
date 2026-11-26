@@ -1,4 +1,7 @@
+import { env } from '@/lib/env';
+
 export const LOCAL_IMAGES = {
+  logo: require('../../assets/images/tazaj/logo.jpeg') as number,
   'prod-tomatoes': require('../../assets/images/tazaj/prod-tomatoes.png') as number,
   'prod-avocado': require('../../assets/images/tazaj/prod-avocado.png') as number,
   'prod-milk': require('../../assets/images/tazaj/prod-milk.png') as number,
@@ -24,8 +27,14 @@ export const LOCAL_IMAGES = {
 export type LocalImageKey = keyof typeof LOCAL_IMAGES;
 
 export function getLocalImage(keyOrUrl?: string | null): number | { uri: string } {
-  if (!keyOrUrl) return LOCAL_IMAGES['prod-tomatoes'];
-  if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://')) {
+  if (!keyOrUrl) return LOCAL_IMAGES.logo;
+  if (
+    keyOrUrl.startsWith('http://') ||
+    keyOrUrl.startsWith('https://') ||
+    keyOrUrl.startsWith('file://') ||
+    keyOrUrl.startsWith('content://') ||
+    keyOrUrl.startsWith('data:')
+  ) {
     return { uri: keyOrUrl };
   }
   const normalized = keyOrUrl.startsWith('local://')
@@ -34,5 +43,9 @@ export function getLocalImage(keyOrUrl?: string | null): number | { uri: string 
   if (normalized in LOCAL_IMAGES) {
     return LOCAL_IMAGES[normalized as LocalImageKey];
   }
-  return LOCAL_IMAGES['prod-tomatoes'];
+  const r2Base = env.r2UploadUrl.trim().replace(/\/+$/, '');
+  if (r2Base && (normalized.includes('/') || /\.(png|jpe?g|webp|gif|avif)$/i.test(normalized))) {
+    return { uri: `${r2Base}/${normalized.replace(/^\/+/, '')}` };
+  }
+  return LOCAL_IMAGES.logo;
 }

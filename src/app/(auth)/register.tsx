@@ -1,6 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import * as Location from 'expo-location';
 import { Link } from 'expo-router';
-import { Lock, MapPin, Phone, User as UserIcon } from 'lucide-react-native';
+import {
+  CheckCircle2,
+  LocateFixed,
+  Lock,
+  MapPin,
+  Phone,
+  User as UserIcon,
+} from 'lucide-react-native';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
   KeyboardAvoidingView,
@@ -25,6 +34,7 @@ const registerSchema = z.object({
   name: z.string().trim().min(3, STRINGS.auth.validation.nameMin),
   phone: z.string().trim().refine(isValidPhoneNumber, STRINGS.auth.validation.phoneInvalid),
   area: z.string().trim().min(2, STRINGS.auth.validation.areaMin),
+  street: z.string().trim().optional(),
   password: z.string().min(6, STRINGS.auth.validation.passwordMin),
 });
 
@@ -33,6 +43,10 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 export default function RegisterScreen() {
   const { mutateAsync: register, isPending } = useMobileRegister();
   const showToast = useUiStore((s) => s.showToast);
+
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const {
     control,
@@ -43,14 +57,61 @@ export default function RegisterScreen() {
     defaultValues: {
       name: '',
       phone: '',
-      area: 'سموحة، الإسكندرية',
+      area: '',
+      street: '',
       password: '',
     },
   });
 
-  const onSubmit = async (values: RegisterFormValues) => {
+  const handleDetectLocation = async () => {
+    setLocating(true);
+    setLocationError(null);
     try {
-      await register(values);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationError(STRINGS.auth.locationPermissionDenied);
+        showToast(STRINGS.auth.locationPermissionDenied, 'error');
+        return;
+      }
+
+      let position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }).catch(() => null);
+
+      if (!position) {
+        position = await Location.getLastKnownPositionAsync().catch(() => null);
+      }
+
+      if (!position) {
+        setLocationError(STRINGS.auth.locationFailed);
+        showToast(STRINGS.auth.locationFailed, 'error');
+        return;
+      }
+
+      const { latitude, longitude } = position.coords;
+      setCoords({ latitude, longitude });
+
+      showToast(STRINGS.auth.locationDetected);
+    } catch {
+      setLocationError(STRINGS.auth.locationFailed);
+      showToast(STRINGS.auth.locationFailed, 'error');
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const onSubmit = async (values: RegisterFormValues) => {
+    if (!coords) {
+      setLocationError(STRINGS.auth.validation.locationRequired);
+      showToast(STRINGS.auth.validation.locationRequired, 'error');
+      return;
+    }
+    try {
+      await register({
+        ...values,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      });
       showToast(STRINGS.auth.registerSuccess);
     } catch (err) {
       const msg = err instanceof Error ? err.message : STRINGS.common.errorMessage;
@@ -126,6 +187,73 @@ export default function RegisterScreen() {
                 />
               )}
             />
+
+            <Controller
+              control={control}
+              name="street"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label={STRINGS.auth.streetLabel}
+                  placeholder={STRINGS.auth.streetPlaceholder}
+                  value={value ?? ''}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  startIcon={<MapPin size={18} color={colors.onSurfaceSubtle} />}
+                />
+              )}
+            />
+
+            {/* GPS Location Picker */}
+            <View className="gap-xs">
+              <Text className="font-label text-label-md text-on-surface text-right">
+                {STRINGS.auth.locationSectionLabel}
+              </Text>
+              <View
+                className={`p-md rounded-md border gap-sm ${
+                  coords
+                    ? 'bg-mint-surface border-primary'
+                    : locationError
+                      ? 'bg-error-container border-error'
+                      : 'bg-surface border-outline-subtle'
+                }`}
+              >
+                <View className="flex-row items-center justify-between gap-sm">
+                  <View className="flex-row items-center gap-xs flex-1">
+                    {coords ? (
+                      <CheckCircle2 size={18} color={colors.primary} />
+                    ) : (
+                      <LocateFixed size={18} color={colors.onSurfaceMuted} />
+                    )}
+                    <Text
+                      className={`font-body text-body-sm flex-1 text-right ${
+                        coords ? 'text-on-mint-surface' : 'text-on-surface-muted'
+                      }`}
+                    >
+                      {coords
+                        ? STRINGS.auth.locationDetected
+                        : STRINGS.auth.locationNotSet}
+                    </Text>
+                  </View>
+                </View>
+
+                <Button
+                  variant={coords ? 'mint-outline' : 'mint'}
+                  size="md"
+                  isLoading={locating}
+                  onPress={handleDetectLocation}
+                >
+                  <LocateFixed size={16} color={colors.primary} />
+                  <Text className="font-label-bold text-label-md text-primary">
+                    {locating ? STRINGS.auth.detectingLocation : STRINGS.auth.detectLocationBtn}
+                  </Text>
+                </Button>
+              </View>
+              {locationError ? (
+                <Text className="font-body text-body-sm text-error text-right">
+                  {locationError}
+                </Text>
+              ) : null}
+            </View>
 
             <Controller
               control={control}

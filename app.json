@@ -32,6 +32,12 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",
@@ -50,6 +56,18 @@
           "supportedLocales": [
             "ar"
           ]
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "يحتاج تطبيق طازج إلى الوصول لموقعك لتحديد عنوان التوصيل بدقة."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "يحتاج تطبيق طازج إلى الوصول للصور لرفع صور المنتجات والأقسام."
         }
       ],
       "expo-notifications"
