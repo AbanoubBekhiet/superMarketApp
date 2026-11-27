@@ -53,7 +53,9 @@ export async function updateProfileInfo(payload: {
 export async function fetchAddresses(): Promise<Address[]> {
   const uid = resolveCurrentUserId();
   const snap = await getDocs(collection(firestoreDb, 'users', uid, 'addresses'));
-  return snap.docs.map((d) => mapAddress(d.id, d.data() as Omit<Address, 'id'>));
+  const list = snap.docs.map((d) => mapAddress(d.id, d.data() as Omit<Address, 'id'>));
+  const primary = list.find((a) => a.isDefault) ?? list[0];
+  return primary ? [{ ...primary, isDefault: true }] : [];
 }
 
 export async function addAddress(
@@ -61,17 +63,7 @@ export async function addAddress(
 ): Promise<Address> {
   const uid = resolveCurrentUserId();
   const colRef = collection(firestoreDb, 'users', uid, 'addresses');
-
-  if (payload.isDefault) {
-    const existing = await getDocs(colRef);
-    const batch = writeBatch(firestoreDb);
-    existing.docs.forEach((d) => {
-      if ((d.data() as { isDefault?: boolean }).isDefault) {
-        batch.update(d.ref, { isDefault: false });
-      }
-    });
-    await batch.commit();
-  }
+  const existing = await getDocs(colRef);
 
   const data: Omit<Address, 'id'> = {
     label: payload.label,
@@ -85,12 +77,37 @@ export async function addAddress(
     landmark: payload.landmark ?? null,
     latitude: payload.latitude ?? null,
     longitude: payload.longitude ?? null,
-    isDefault: payload.isDefault,
+    isDefault: true,
     deliveryNotes: payload.deliveryNotes ?? null,
   };
 
-  const ref = await addDoc(colRef, data);
-  return { id: ref.id, ...data };
+  let savedId: string;
+  if (existing.docs.length > 0) {
+    const primaryDoc =
+      existing.docs.find((d) => (d.data() as { isDefault?: boolean }).isDefault) ?? existing.docs[0];
+    savedId = primaryDoc.id;
+    const batch = writeBatch(firestoreDb);
+    batch.set(primaryDoc.ref, data);
+    existing.docs.forEach((d) => {
+      if (d.id !== primaryDoc.id) {
+        batch.delete(d.ref);
+      }
+    });
+    await batch.commit();
+  } else {
+    const ref = await addDoc(colRef, data);
+    savedId = ref.id;
+  }
+
+  await updateDoc(doc(firestoreDb, 'users', uid), {
+    area: payload.area,
+    ...(payload.latitude != null && payload.longitude != null
+      ? { latitude: payload.latitude, longitude: payload.longitude }
+      : {}),
+    updatedAt: new Date().toISOString(),
+  }).catch(() => undefined);
+
+  return { id: savedId, ...data };
 }
 
 export async function setDefaultAddress(addressId: string): Promise<Address[]> {

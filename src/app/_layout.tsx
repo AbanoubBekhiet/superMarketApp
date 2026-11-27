@@ -39,7 +39,7 @@ import { colors } from '@/theme/tokens';
 
 ensureForcedRtl();
 configureNotifications();
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function LiveNotificationWatcher() {
   const user = useAuthStore((s) => s.user);
@@ -179,7 +179,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsReady && isHydrated) {
-      SplashScreen.hideAsync();
+      void SplashScreen.hideAsync().catch(() => undefined);
     }
   }, [fontsReady, isHydrated]);
 
@@ -199,6 +199,8 @@ export default function RootLayout() {
               <Stack.Screen name="(auth)" />
               <Stack.Screen name="(user)" />
               <Stack.Screen name="(admin)" />
+              <Stack.Screen name="admin-settings" />
+              <Stack.Screen name="admin-carts" />
             </Stack>
             <ToastBanner />
             {!splashDone ? <BrandSplash onFinish={handleSplashFinish} /> : null}

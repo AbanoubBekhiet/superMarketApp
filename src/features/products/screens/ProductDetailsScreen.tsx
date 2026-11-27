@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowRight, CheckCircle2, Heart, Share2, ShoppingBag } from 'lucide-react-native';
+import { ArrowRight, CheckCircle2, Heart, ShoppingBag } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -97,36 +97,26 @@ export function ProductDetailsScreen() {
           {STRINGS.productDetails.headerTitle}
         </Text>
 
-        <View className="flex-row items-center gap-sm">
-          <Pressable
-            onPress={() => showToast(STRINGS.productDetails.shareSuccess)}
-            accessibilityRole="button"
-            accessibilityLabel={STRINGS.productDetails.shareLabel}
-            className="w-10 h-10 rounded-full bg-surface-card border border-outline-subtle items-center justify-center active:bg-mint-surface"
-          >
-            <Share2 size={18} color={colors.onSurface} />
-          </Pressable>
-          <Pressable
-            onPress={handleToggleFav}
-            accessibilityRole="button"
-            accessibilityLabel={STRINGS.profile.favorites}
-            className="w-10 h-10 rounded-full bg-surface-card border border-outline-subtle items-center justify-center active:bg-mint-surface"
-          >
-            <Heart
-              size={18}
-              color={isFav ? colors.error : colors.onSurface}
-              fill={isFav ? colors.error : 'transparent'}
-            />
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={handleToggleFav}
+          accessibilityRole="button"
+          accessibilityLabel={STRINGS.profile.favorites}
+          className="w-10 h-10 rounded-full bg-surface-card border border-outline-subtle items-center justify-center active:bg-mint-surface"
+        >
+          <Heart
+            size={18}
+            color={isFav ? colors.error : colors.onSurface}
+            fill={isFav ? colors.error : 'transparent'}
+          />
+        </Pressable>
       </View>
 
       <ScrollView
         contentContainerClassName="px-page-x pt-base pb-xl gap-lg"
         showsVerticalScrollIndicator={false}
       >
-        {/* Image Gallery Card */}
-        <Card className="items-center gap-md">
+        {/* Single Image Card */}
+        <Card className="items-center">
           <View className="w-full aspect-square rounded-md overflow-hidden bg-surface">
             <Image
               source={getLocalImage(product.imageKey)}
@@ -135,17 +125,11 @@ export function ProductDetailsScreen() {
               accessibilityLabel={product.name}
             />
           </View>
-          <View className="flex-row items-center gap-xs">
-            <View className="w-5 h-1.5 rounded-full bg-primary" />
-            <View className="w-1.5 h-1.5 rounded-full bg-soft-accent" />
-            <View className="w-1.5 h-1.5 rounded-full bg-soft-accent" />
-          </View>
         </Card>
 
-        {/* Brand, Availability, Title, Price */}
+        {/* Availability, Title, Unit & Price */}
         <View className="gap-sm">
-          <View className="flex-row items-center justify-between gap-sm">
-            <Text className="font-label text-label-md text-primary">{product.brand}</Text>
+          <View className="flex-row items-center justify-start">
             <View className="flex-row items-center gap-xs px-sm py-xs rounded-sm bg-mint-surface">
               <CheckCircle2 size={14} color={colors.primary} />
               <Text className="font-label text-label-sm text-on-mint-surface">
@@ -191,51 +175,36 @@ export function ProductDetailsScreen() {
           </View>
         </View>
 
-        {/* Weight Selector */}
+        {/* Unit & Pieces Info */}
         {product.weights.length > 0 ? (
-          <View className="gap-sm">
-            <Text className="font-title text-title-sm text-on-surface text-right">
-              {STRINGS.productDetails.chooseWeight}
-            </Text>
-            <View className="flex-row gap-sm">
-              {product.weights.map((option) => {
-                const active = option.id === selectedWeight?.id;
-                return (
-                  <Pressable
-                    key={option.id}
-                    onPress={() => setSelectedWeightId(option.id)}
-                    className={`flex-1 py-md px-sm rounded-md items-center ${
-                      active
-                        ? 'bg-mint-surface border-2 border-primary'
-                        : 'bg-surface-card border border-outline-subtle'
+          <View className="flex-row gap-sm">
+            {product.weights.map((option) => {
+              const active = option.id === selectedWeight?.id;
+              return (
+                <Pressable
+                  key={option.id}
+                  onPress={() => setSelectedWeightId(option.id)}
+                  className={`flex-1 py-md px-sm rounded-md items-center ${
+                    active
+                      ? 'bg-mint-surface border-2 border-primary'
+                      : 'bg-surface-card border border-outline-subtle'
+                  }`}
+                >
+                  <Text
+                    className={`font-label text-label-md ${
+                      active ? 'text-on-mint-surface' : 'text-on-surface'
                     }`}
                   >
-                    <Text
-                      className={`font-label text-label-md ${
-                        active ? 'text-on-mint-surface' : 'text-on-surface'
-                      }`}
-                    >
-                      {option.label}
-                      {product.weights.length === 1 && product.piecesPerUnit
-                        ? ` (${formatNumber(product.piecesPerUnit)} قطعة)`
-                        : ''}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+                    {option.label}
+                    {product.weights.length === 1 && product.piecesPerUnit
+                      ? ` (${formatNumber(product.piecesPerUnit)} قطعة)`
+                      : ''}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         ) : null}
-
-        {/* Description Card */}
-        <Card className="gap-xs">
-          <Text className="font-title text-title-sm text-on-surface text-right">
-            {STRINGS.productDetails.aboutProduct}
-          </Text>
-          <Text className="font-body text-body-md text-on-surface-muted text-right leading-6">
-            {product.description}
-          </Text>
-        </Card>
       </ScrollView>
 
       {/* Sticky Bottom Action Bar */}

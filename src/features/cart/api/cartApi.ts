@@ -64,7 +64,7 @@ export async function saveUserCart(
 
 export async function fetchActiveCarts(): Promise<ActiveCart[]> {
   const snap = await getDocs(collection(firestoreDb, 'carts'));
-  return snap.docs
+  const baseCarts = snap.docs
     .map((d) => {
       const data = d.data() as FirestoreCartDoc;
       const items = Array.isArray(data.items)
@@ -91,4 +91,44 @@ export async function fetchActiveCarts(): Promise<ActiveCart[]> {
     })
     .filter((cart) => cart.itemsCount > 0 && cart.items.length > 0)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  return Promise.all(
+    baseCarts.map(async (cart) => {
+      const [userSnap, addrSnap] = await Promise.all([
+        getDoc(doc(firestoreDb, 'users', cart.userId)).catch(() => null),
+        getDocs(collection(firestoreDb, 'users', cart.userId, 'addresses')).catch(() => null),
+      ]);
+      const userData = userSnap?.exists()
+        ? (userSnap.data() as {
+            phone?: string | null;
+            area?: string | null;
+            latitude?: number | null;
+            longitude?: number | null;
+          })
+        : null;
+      const addrs = addrSnap?.docs.map(
+        (d) =>
+          d.data() as {
+            street?: string;
+            area?: string;
+            city?: string;
+            isDefault?: boolean;
+            latitude?: number | null;
+            longitude?: number | null;
+          },
+      ) ?? [];
+      const primaryAddr = addrs.find((a) => a.isDefault) ?? addrs[0];
+      const formattedAddr = primaryAddr
+        ? [primaryAddr.street, primaryAddr.area, primaryAddr.city].filter(Boolean).join('، ')
+        : undefined;
+      return {
+        ...cart,
+        customerPhone: cart.customerPhone || userData?.phone || '',
+        customerArea: cart.customerArea || primaryAddr?.area || userData?.area || '',
+        customerAddress: formattedAddr,
+        customerLatitude: primaryAddr?.latitude ?? userData?.latitude ?? null,
+        customerLongitude: primaryAddr?.longitude ?? userData?.longitude ?? null,
+      };
+    }),
+  );
 }

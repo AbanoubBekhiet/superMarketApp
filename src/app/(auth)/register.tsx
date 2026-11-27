@@ -26,6 +26,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { STRINGS } from '@/constants/strings';
 import { useMobileRegister } from '@/features/auth/hooks/useAuth';
+import { formatLatLngCoords, reverseGeocodeCoords } from '@/lib/geocoding';
 import { isValidPhoneNumber } from '@/lib/phoneAuth';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
@@ -45,12 +46,14 @@ export default function RegisterScreen() {
   const showToast = useUiStore((s) => s.showToast);
 
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [detectedAddressText, setDetectedAddressText] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
 
   const {
     control,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -90,6 +93,19 @@ export default function RegisterScreen() {
 
       const { latitude, longitude } = position.coords;
       setCoords({ latitude, longitude });
+
+      const resolved = await reverseGeocodeCoords(latitude, longitude);
+      if (resolved) {
+        setDetectedAddressText(resolved.formattedAddress);
+        if (resolved.area) {
+          setValue('area', resolved.area, { shouldValidate: true });
+        }
+        if (resolved.street) {
+          setValue('street', resolved.street, { shouldValidate: true });
+        }
+      } else {
+        setDetectedAddressText(formatLatLngCoords(latitude, longitude));
+      }
 
       showToast(STRINGS.auth.locationDetected);
     } catch {
@@ -230,7 +246,7 @@ export default function RegisterScreen() {
                       }`}
                     >
                       {coords
-                        ? STRINGS.auth.locationDetected
+                        ? detectedAddressText || STRINGS.auth.locationDetected
                         : STRINGS.auth.locationNotSet}
                     </Text>
                   </View>

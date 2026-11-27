@@ -56,30 +56,34 @@ class OneSignalService {
 
     const { OneSignal, LogLevel } = pkg;
 
-    if (this.initializedAppId !== cleanAppId) {
-      OneSignal.Debug.setLogLevel(__DEV__ ? LogLevel.Verbose : LogLevel.None);
-      OneSignal.initialize(cleanAppId);
-      this.initializedAppId = cleanAppId;
-      this.setupPushSubscriptionObserver(OneSignal);
-      void this.ensurePermissionAndOptIn(OneSignal);
+    try {
+      if (this.initializedAppId !== cleanAppId) {
+        OneSignal.Debug.setLogLevel(__DEV__ ? LogLevel.Verbose : LogLevel.None);
+        OneSignal.initialize(cleanAppId);
+        this.initializedAppId = cleanAppId;
+        this.setupPushSubscriptionObserver(OneSignal);
+        void this.ensurePermissionAndOptIn(OneSignal);
+      }
+
+      const clickListener = (event: NotificationClickEvent): void => {
+        const data = event.notification?.additionalData as Record<string, unknown> | undefined;
+        onNotificationClick?.(data);
+      };
+
+      const foregroundListener = (event: NotificationWillDisplayEvent): void => {
+        event.getNotification().display();
+      };
+
+      OneSignal.Notifications.addEventListener('click', clickListener);
+      OneSignal.Notifications.addEventListener('foregroundWillDisplay', foregroundListener);
+
+      return () => {
+        OneSignal.Notifications.removeEventListener('click', clickListener);
+        OneSignal.Notifications.removeEventListener('foregroundWillDisplay', foregroundListener);
+      };
+    } catch {
+      return () => undefined;
     }
-
-    const clickListener = (event: NotificationClickEvent): void => {
-      const data = event.notification?.additionalData as Record<string, unknown> | undefined;
-      onNotificationClick?.(data);
-    };
-
-    const foregroundListener = (event: NotificationWillDisplayEvent): void => {
-      event.getNotification().display();
-    };
-
-    OneSignal.Notifications.addEventListener('click', clickListener);
-    OneSignal.Notifications.addEventListener('foregroundWillDisplay', foregroundListener);
-
-    return () => {
-      OneSignal.Notifications.removeEventListener('click', clickListener);
-      OneSignal.Notifications.removeEventListener('foregroundWillDisplay', foregroundListener);
-    };
   }
 
   private async ensurePermissionAndOptIn(OneSignal: typeof OneSignalType): Promise<void> {

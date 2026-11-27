@@ -1,17 +1,15 @@
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import {
   AlertTriangle,
   Bell,
   CheckCircle2,
+  ChevronLeft,
   CreditCard,
-  Headset,
   LogOut,
-  Megaphone,
-  Plus,
+  Settings,
   ShoppingBag,
   ShoppingCart,
-  Trash2,
   Truck,
   UserPlus,
   X,
@@ -22,27 +20,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useAdminOverview } from '@/features/admin/hooks/useAdminOverview';
 import { useActiveCarts } from '@/features/cart/hooks/useActiveCarts';
 import { NotificationCardItem } from '@/features/profile/components/NotificationCardItem';
 import {
-  useAppSettings,
-  useBanners,
-  useCreateBanner,
-  useDeleteBanner,
   useMarkAllNotificationsRead,
   useNotifications,
-  useUpdateAppSetting,
 } from '@/features/profile/hooks/useProfile';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { getLocalImage } from '@/lib/images';
 import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
-import type { ActiveCart } from '@/types/domain';
 
 export function AdminDashboardScreen() {
   const user = useAuthStore((s) => s.user);
@@ -53,72 +44,10 @@ export function AdminDashboardScreen() {
   const { data: activeCarts = [] } = useActiveCarts();
   const { data: notifications = [] } = useNotifications();
   const { mutate: markAllRead } = useMarkAllNotificationsRead();
-  const { data: settings = [] } = useAppSettings();
-  const { mutateAsync: updateSetting, isPending: savingSetting } = useUpdateAppSetting();
-  const { data: banners = [] } = useBanners();
-  const { mutateAsync: addBanner, isPending: savingBanner } = useCreateBanner();
-  const { mutateAsync: removeBanner } = useDeleteBanner();
 
   const [notifOpen, setNotifOpen] = useState(false);
-  const [selectedCart, setSelectedCart] = useState<ActiveCart | null>(null);
-  const [supportPhoneDraft, setSupportPhoneDraft] = useState<string | null>(null);
-  const [bannerTag, setBannerTag] = useState('عرض خاص');
-  const [bannerTitle, setBannerTitle] = useState('');
-  const [bannerSubtitle, setBannerSubtitle] = useState('');
-
-  const currentSupportPhone =
-    settings.find((s) => s.key === 'support_phone')?.value ?? '+20 102 458 9120';
-  const supportPhoneValue = supportPhoneDraft ?? currentSupportPhone;
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
-
-  const handleSaveSupportPhone = async () => {
-    const clean = supportPhoneValue.trim();
-    if (!clean) {
-      showToast(STRINGS.common.requiredField, 'error');
-      return;
-    }
-    try {
-      await updateSetting({
-        key: 'support_phone',
-        value: clean,
-        description: 'رقم خدمة العملاء',
-      });
-      setSupportPhoneDraft(null);
-      showToast(STRINGS.admin.supportPhoneSaved);
-    } catch {
-      showToast(STRINGS.common.errorMessage, 'error');
-    }
-  };
-
-  const handleAddBanner = async () => {
-    if (!bannerTitle.trim() || !bannerSubtitle.trim()) {
-      showToast(STRINGS.common.requiredField, 'error');
-      return;
-    }
-    try {
-      await addBanner({
-        tag: bannerTag.trim() || 'عرض خاص',
-        title: bannerTitle.trim(),
-        subtitle: bannerSubtitle.trim(),
-        sortOrder: banners.length + 1,
-      });
-      setBannerTitle('');
-      setBannerSubtitle('');
-      showToast(STRINGS.admin.bannerSaved);
-    } catch {
-      showToast(STRINGS.common.errorMessage, 'error');
-    }
-  };
-
-  const handleDeleteBanner = async (id: string) => {
-    try {
-      await removeBanner(id);
-      showToast(STRINGS.admin.bannerDeleted);
-    } catch {
-      showToast(STRINGS.common.errorMessage, 'error');
-    }
-  };
 
   const handleLogout = async () => {
     await signOut();
@@ -199,10 +128,6 @@ export function AdminDashboardScreen() {
               >
                 {formatCurrency(overview.totalRevenue)}
               </Text>
-              <Badge
-                variant="mint"
-                label={`+${formatNumber(overview.revenueGrowthPercent)}%`}
-              />
             </Card>
 
             <Card className="flex-1 justify-between gap-sm">
@@ -218,10 +143,16 @@ export function AdminDashboardScreen() {
               >
                 {formatNumber(overview.activeOrdersCount)}
               </Text>
-              <Badge
-                variant="warning"
-                label={`${formatNumber(overview.processingOrdersCount)} ${STRINGS.admin.processingBadgeSuffix}`}
-              />
+              <View className="flex-row items-center gap-xs flex-wrap">
+                <Badge
+                  variant="warning"
+                  label={`${formatNumber(overview.pendingOrdersCount)} ${STRINGS.admin.pendingBadgeSuffix}`}
+                />
+                <Badge
+                  variant="mint"
+                  label={`${formatNumber(overview.processingOrdersCount)} ${STRINGS.admin.processingBadgeSuffix}`}
+                />
+              </View>
             </Card>
           </View>
 
@@ -286,144 +217,64 @@ export function AdminDashboardScreen() {
             </View>
           </Card>
 
-          {/* Active Customer Carts */}
-          <Card className="gap-md">
-            <View className="flex-row items-center justify-between pb-sm border-b border-outline-subtle">
-              <View className="flex-row items-center gap-sm">
-                <ShoppingCart size={18} color={colors.primary} />
-                <Text className="font-headline text-title-md text-on-surface">
-                  {STRINGS.admin.activeCartsTitle}
-                </Text>
-              </View>
-              <Badge variant="mint" label={formatNumber(activeCarts.length)} />
-            </View>
-
-            {activeCarts.length === 0 ? (
-              <Text className="font-body text-body-sm text-on-surface-subtle text-center py-sm">
-                {STRINGS.admin.activeCartsEmpty}
-              </Text>
-            ) : (
-              <View className="gap-xs">
-                {activeCarts.map((cart, idx) => (
-                  <Pressable
-                    key={cart.userId}
-                    onPress={() => setSelectedCart(cart)}
-                    className={`py-sm flex-row items-center justify-between gap-sm active:bg-surface ${
-                      idx < activeCarts.length - 1 ? 'border-b border-outline-subtle' : ''
-                    }`}
-                  >
-                    <View className="flex-1 min-w-0 gap-xs">
-                      <Text className="font-title text-title-sm text-on-surface text-right" numberOfLines={1}>
-                        {cart.customerName}
-                      </Text>
-                      <Text
-                        className="font-body text-body-sm text-on-surface-subtle text-right"
-                        style={{ fontVariant: ['tabular-nums'] }}
-                      >
-                        {formatNumber(cart.itemsCount)} {STRINGS.admin.activeCartsItemsSuffix}
-                        {cart.customerArea ? ` • ${cart.customerArea}` : ''}
-                      </Text>
-                    </View>
-                    <Text
-                      className="font-headline text-title-sm text-primary"
-                      style={{ fontVariant: ['tabular-nums'] }}
-                    >
-                      {formatCurrency(cart.subtotal)}
+          {/* Active Carts Navigation */}
+          <Pressable
+            onPress={() => router.push('/admin-carts' as Href)}
+            accessibilityRole="button"
+            accessibilityLabel={STRINGS.admin.activeCartsTitle}
+            className="active:opacity-90"
+          >
+            <Card className="flex-row items-center justify-between gap-md">
+              <View className="flex-row items-center gap-md flex-1 min-w-0">
+                <View className="w-11 h-11 rounded-md bg-mint-surface items-center justify-center shrink-0">
+                  <ShoppingCart size={20} color={colors.primary} />
+                </View>
+                <View className="flex-1 min-w-0 gap-xs">
+                  <View className="flex-row items-center gap-sm">
+                    <Text className="font-headline text-title-md text-on-surface text-right">
+                      {STRINGS.admin.activeCartsTitle}
                     </Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-          </Card>
-
-          {/* Store Support Phone Setting */}
-          <Card className="gap-md">
-            <View className="flex-row items-center gap-sm pb-sm border-b border-outline-subtle">
-              <Headset size={18} color={colors.primary} />
-              <Text className="font-headline text-title-md text-on-surface">
-                {STRINGS.admin.storeSettingsTitle}
-              </Text>
-            </View>
-            <Input
-              label={STRINGS.admin.supportPhoneLabel}
-              placeholder={STRINGS.admin.supportPhonePlaceholder}
-              value={supportPhoneValue}
-              onChangeText={setSupportPhoneDraft}
-              keyboardType="phone-pad"
-            />
-            <Button
-              variant="primary"
-              size="md"
-              isLoading={savingSetting}
-              label={STRINGS.common.save}
-              onPress={handleSaveSupportPhone}
-            />
-          </Card>
-
-          {/* Banners Management */}
-          <Card className="gap-md">
-            <View className="flex-row items-center gap-sm pb-sm border-b border-outline-subtle">
-              <Megaphone size={18} color={colors.primary} />
-              <Text className="font-headline text-title-md text-on-surface">
-                {STRINGS.admin.bannersTitle}
-              </Text>
-            </View>
-
-            <Input
-              placeholder={STRINGS.admin.bannerTagPlaceholder}
-              value={bannerTag}
-              onChangeText={setBannerTag}
-            />
-            <Input
-              placeholder={STRINGS.admin.bannerTitlePlaceholder}
-              value={bannerTitle}
-              onChangeText={setBannerTitle}
-            />
-            <Input
-              placeholder={STRINGS.admin.bannerSubtitlePlaceholder}
-              value={bannerSubtitle}
-              onChangeText={setBannerSubtitle}
-            />
-            <Button
-              variant="mint"
-              size="md"
-              isLoading={savingBanner}
-              onPress={handleAddBanner}
-            >
-              <Plus size={16} color={colors.primary} />
-              <Text className="font-label-bold text-label-md text-on-mint-surface">
-                {STRINGS.admin.addBannerBtn}
-              </Text>
-            </Button>
-
-            {banners.length > 0 ? (
-              <View className="gap-xs pt-xs border-t border-outline-subtle">
-                {banners.map((b) => (
-                  <View
-                    key={b.id}
-                    className="py-sm flex-row items-center justify-between gap-sm border-b border-outline-subtle"
-                  >
-                    <View className="flex-1 min-w-0 gap-xs">
-                      <Text className="font-title text-title-sm text-on-surface text-right" numberOfLines={1}>
-                        {b.title}
-                      </Text>
-                      <Text className="font-body text-body-sm text-on-surface-subtle text-right" numberOfLines={1}>
-                        {b.subtitle}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => handleDeleteBanner(b.id)}
-                      hitSlop={8}
-                      accessibilityLabel={STRINGS.common.delete}
-                      className="w-8 h-8 rounded-full bg-surface items-center justify-center"
-                    >
-                      <Trash2 size={16} color={colors.error} />
-                    </Pressable>
+                    <Badge variant="mint" label={formatNumber(activeCarts.length)} />
                   </View>
-                ))}
+                  <Text
+                    className="font-body text-body-sm text-on-surface-subtle text-right"
+                    numberOfLines={1}
+                  >
+                    {STRINGS.admin.activeCartsNavSubtitle}
+                  </Text>
+                </View>
               </View>
-            ) : null}
-          </Card>
+              <ChevronLeft size={20} color={colors.onSurfaceMuted} />
+            </Card>
+          </Pressable>
+
+          {/* Settings & Banners Navigation */}
+          <Pressable
+            onPress={() => router.push('/admin-settings' as Href)}
+            accessibilityRole="button"
+            accessibilityLabel={STRINGS.admin.settingsNavBtn}
+            className="active:opacity-90"
+          >
+            <Card className="flex-row items-center justify-between gap-md">
+              <View className="flex-row items-center gap-md flex-1 min-w-0">
+                <View className="w-11 h-11 rounded-md bg-mint-surface items-center justify-center shrink-0">
+                  <Settings size={20} color={colors.primary} />
+                </View>
+                <View className="flex-1 min-w-0 gap-xs">
+                  <Text className="font-headline text-title-md text-on-surface text-right">
+                    {STRINGS.admin.settingsNavBtn}
+                  </Text>
+                  <Text
+                    className="font-body text-body-sm text-on-surface-subtle text-right"
+                    numberOfLines={1}
+                  >
+                    {STRINGS.admin.settingsNavSubtitle}
+                  </Text>
+                </View>
+              </View>
+              <ChevronLeft size={20} color={colors.onSurfaceMuted} />
+            </Card>
+          </Pressable>
         </ScrollView>
       )}
 
@@ -465,95 +316,6 @@ export function AdminDashboardScreen() {
                 notifications.map((n) => <NotificationCardItem key={n.id} notification={n} />)
               )}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* Active Cart Details Modal */}
-      <Modal
-        visible={selectedCart !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedCart(null)}
-      >
-        <Pressable
-          className="flex-1 bg-on-surface/40 justify-end"
-          onPress={() => setSelectedCart(null)}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            className="bg-surface-card rounded-t-xl p-lg gap-md border-t border-outline-subtle max-h-[75%]"
-          >
-            {selectedCart ? (
-              <>
-                <View className="flex-row items-center justify-between pb-sm border-b border-outline-subtle">
-                  <Text className="font-headline text-title-lg text-on-surface">
-                    {STRINGS.admin.activeCartsDetailsTitle}
-                  </Text>
-                  <Pressable onPress={() => setSelectedCart(null)} hitSlop={8}>
-                    <X size={20} color={colors.onSurfaceMuted} />
-                  </Pressable>
-                </View>
-
-                <View className="gap-xs">
-                  <Text className="font-title text-title-md text-on-surface text-right">
-                    {selectedCart.customerName}
-                  </Text>
-                  {selectedCart.customerPhone ? (
-                    <Text
-                      className="font-body text-body-sm text-on-surface-muted text-right"
-                      style={{ writingDirection: 'ltr', fontVariant: ['tabular-nums'] }}
-                    >
-                      {selectedCart.customerPhone}
-                    </Text>
-                  ) : null}
-                  {selectedCart.customerArea ? (
-                    <Text className="font-body text-body-sm text-on-surface-subtle text-right">
-                      {selectedCart.customerArea}
-                    </Text>
-                  ) : null}
-                </View>
-
-                <ScrollView contentContainerClassName="gap-sm">
-                  {selectedCart.items.map((it, idx) => (
-                    <View
-                      key={`${it.productId}-${it.weightOptionId ?? idx}`}
-                      className="p-md rounded-lg border border-outline-subtle bg-surface flex-row items-center justify-between gap-sm"
-                    >
-                      <View className="flex-1 min-w-0">
-                        <Text className="font-title text-title-sm text-on-surface text-right" numberOfLines={1}>
-                          {it.name}
-                        </Text>
-                        <Text
-                          className="font-body text-body-sm text-on-surface-subtle text-right"
-                          style={{ fontVariant: ['tabular-nums'] }}
-                        >
-                          {formatNumber(it.quantity)} × {formatCurrency(it.unitPrice)}
-                        </Text>
-                      </View>
-                      <Text
-                        className="font-headline text-title-sm text-primary"
-                        style={{ fontVariant: ['tabular-nums'] }}
-                      >
-                        {formatCurrency(it.unitPrice * it.quantity)}
-                      </Text>
-                    </View>
-                  ))}
-                </ScrollView>
-
-                <View className="flex-row items-center justify-between pt-sm border-t border-outline-subtle">
-                  <Text className="font-title text-title-md text-on-surface">
-                    {STRINGS.cart.subtotal}
-                  </Text>
-                  <Text
-                    className="font-headline text-headline-md text-primary"
-                    style={{ fontVariant: ['tabular-nums'] }}
-                  >
-                    {formatCurrency(selectedCart.subtotal)}
-                  </Text>
-                </View>
-              </>
-            ) : null}
           </Pressable>
         </Pressable>
       </Modal>

@@ -6,11 +6,12 @@ import {
   MessageCircle,
   Phone,
   ReceiptText,
+  Search,
   User as UserIcon,
   X,
 } from 'lucide-react-native';
-import { useState } from 'react';
-import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -24,7 +25,9 @@ import {
   useUpdateCustomerStatus,
 } from '@/features/customers/hooks/useCustomers';
 import { useOrders } from '@/features/orders/hooks/useOrders';
+import { callPhoneNumber, openMapLocation, openWhatsappChat } from '@/lib/contact';
 import { formatCurrency, formatNumber, formatShortDate } from '@/lib/format';
+import { useResolvedGeoAddress } from '@/lib/geocoding';
 import { getLocalImage } from '@/lib/images';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
@@ -34,24 +37,13 @@ const PAGE_SIZE = 15;
 
 type CustomerModalMode = null | 'details' | 'orders';
 
-function formatWhatsappDigits(rawPhone: string): string {
-  const digits = rawPhone.replace(/\D/g, '');
-  if (!digits) return '';
-  if (digits.startsWith('01') && digits.length === 11) {
-    return `2${digits}`;
-  }
-  if (digits.startsWith('00')) {
-    return digits.slice(2);
-  }
-  return digits;
-}
-
 export function AdminCustomersScreen() {
   const showToast = useUiStore((s) => s.showToast);
   const { data: customers = [], isLoading, isError, refetch } = useCustomers();
   const { mutateAsync: updateStatus, isPending: isUpdating } = useUpdateCustomerStatus();
 
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<User | null>(null);
   const [modalMode, setModalMode] = useState<CustomerModalMode>(null);
 
@@ -62,12 +54,24 @@ export function AdminCustomersScreen() {
     selectedCustomer && modalMode === 'details' ? selectedCustomer.id : null,
   );
 
-  const visibleCustomers = customers.slice(0, visibleCount);
-  const hasMore = visibleCustomers.length < customers.length;
+  const filteredCustomers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.phone.toLowerCase().includes(q) ||
+        c.area.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q),
+    );
+  }, [customers, searchQuery]);
+
+  const visibleCustomers = filteredCustomers.slice(0, visibleCount);
+  const hasMore = visibleCustomers.length < filteredCustomers.length;
 
   const handleLoadMore = () => {
     if (hasMore) {
-      setVisibleCount((prev) => Math.min(customers.length, prev + PAGE_SIZE));
+      setVisibleCount((prev) => Math.min(filteredCustomers.length, prev + PAGE_SIZE));
     }
   };
 
@@ -96,32 +100,22 @@ export function AdminCustomersScreen() {
   const resolvedAddressText = defaultAddress
     ? `${defaultAddress.street}، ${defaultAddress.area}، ${defaultAddress.city}`
     : selectedCustomer?.area ?? '';
+  const { address: geoCustomerAddress, coordsText: customerCoordsText } = useResolvedGeoAddress({
+    latitude: resolvedLat,
+    longitude: resolvedLng,
+    fallback: resolvedAddressText,
+  });
 
-  const handleOpenLocation = async () => {
-    if (resolvedLat != null && resolvedLng != null) {
-      await Linking.openURL(`https://www.google.com/maps?q=${resolvedLat},${resolvedLng}`).catch(
-        () => undefined,
-      );
-      return;
-    }
-    if (resolvedAddressText) {
-      await Linking.openURL(
-        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(resolvedAddressText)}`,
-      ).catch(() => undefined);
-    }
-  };
+  const handleOpenLocation = () =>
+    openMapLocation({
+      latitude: resolvedLat,
+      longitude: resolvedLng,
+      addressText: resolvedAddressText,
+    });
 
-  const handleCallCustomer = async (phone: string) => {
-    const clean = phone.replace(/\s+/g, '');
-    if (!clean || clean === 'غير مسجل') return;
-    await Linking.openURL(`tel:${clean}`).catch(() => undefined);
-  };
+  const handleCallCustomer = (phone: string) => callPhoneNumber(phone);
 
-  const handleWhatsappCustomer = async (phone: string) => {
-    const waDigits = formatWhatsappDigits(phone);
-    if (!waDigits) return;
-    await Linking.openURL(`https://wa.me/${waDigits}`).catch(() => undefined);
-  };
+  const handleWhatsappCustomer = (phone: string) => openWhatsappChat(phone);
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-surface">
@@ -135,11 +129,39 @@ export function AdminCustomersScreen() {
         }
       />
 
+      <View className="px-page-x pt-md pb-xs">
+        <View className="flex-row items-center gap-sm bg-surface-card border border-outline-subtle rounded-md px-md min-h-[44px]">
+          <Search size={18} color={colors.onSurfaceSubtle} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              setVisibleCount(PAGE_SIZE);
+            }}
+            placeholder={STRINGS.admin.searchCustomersPlaceholder}
+            placeholderTextColor={colors.onSurfaceSubtle}
+            textAlign="right"
+            className="flex-1 font-body text-body-md text-on-surface py-xs"
+          />
+          {searchQuery ? (
+            <Pressable
+              onPress={() => {
+                setSearchQuery('');
+                setVisibleCount(PAGE_SIZE);
+              }}
+              hitSlop={8}
+            >
+              <X size={16} color={colors.onSurfaceSubtle} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+
       {isLoading ? (
         <ListSkeleton count={4} />
       ) : isError ? (
         <ErrorState onRetry={refetch} />
-      ) : customers.length === 0 ? (
+      ) : filteredCustomers.length === 0 ? (
         <EmptyState />
       ) : (
         <FlashList
@@ -147,7 +169,7 @@ export function AdminCustomersScreen() {
           keyExtractor={(item) => item.id}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.4}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24 }}
           renderItem={({ item: customer }) => {
             const isSuspended = customer.status === 'suspended';
             return (
@@ -233,14 +255,14 @@ export function AdminCustomersScreen() {
             );
           }}
           ListFooterComponent={
-            customers.length > 0 ? (
+            filteredCustomers.length > 0 ? (
               <View className="py-md items-center gap-xs">
                 {hasMore ? <ActivityIndicator size="small" color={colors.primary} /> : null}
                 <Text
                   className="font-body text-body-sm text-on-surface-subtle"
                   style={{ fontVariant: ['tabular-nums'] }}
                 >
-                  عرض {formatNumber(visibleCustomers.length)} من {formatNumber(customers.length)}
+                  عرض {formatNumber(visibleCustomers.length)} من {formatNumber(filteredCustomers.length)}
                 </Text>
               </View>
             ) : null
@@ -334,8 +356,16 @@ export function AdminCustomersScreen() {
                       {STRINGS.admin.customerAddressLabel}
                     </Text>
                     <Text className="font-body text-body-md text-on-surface text-right">
-                      {resolvedAddressText || selectedCustomer.area}
+                      {geoCustomerAddress}
                     </Text>
+                    {customerCoordsText ? (
+                      <Text
+                        className="font-body text-body-sm text-primary text-right"
+                        style={{ writingDirection: 'ltr', fontVariant: ['tabular-nums'] }}
+                      >
+                        {customerCoordsText}
+                      </Text>
+                    ) : null}
                     <Button
                       variant="mint"
                       size="sm"

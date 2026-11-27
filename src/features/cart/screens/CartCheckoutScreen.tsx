@@ -19,7 +19,9 @@ import {
   useSetDefaultAddress,
 } from '@/features/profile/hooks/useProfile';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { useResolvedGeoAddress } from '@/lib/geocoding';
 import { getLocalImage } from '@/lib/images';
+import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
@@ -42,7 +44,18 @@ export function CartCheckoutScreen() {
   const [promoInput, setPromoInput] = useState(promoCode ?? '');
   const [addressModalOpen, setAddressModalOpen] = useState(false);
 
+  const user = useAuthStore((s) => s.user);
   const activeAddress = addresses.find((a) => a.isDefault) ?? addresses[0];
+  const activeLat = activeAddress?.latitude ?? user?.latitude ?? null;
+  const activeLng = activeAddress?.longitude ?? user?.longitude ?? null;
+  const fallbackDeliveryAddress = activeAddress
+    ? `${activeAddress.street}، ${activeAddress.area}، ${activeAddress.city}`
+    : STRINGS.home.defaultLocation;
+  const { address: resolvedDeliveryAddress } = useResolvedGeoAddress({
+    latitude: activeLat,
+    longitude: activeLng,
+    fallback: fallbackDeliveryAddress,
+  });
   const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
   const baseDeliveryFee = Number(settings.find((s) => s.key === 'delivery_fee')?.value ?? '20');
   const freeThreshold = Number(
@@ -91,7 +104,9 @@ export function CartCheckoutScreen() {
       await createOrder({
         addressId: activeAddress.id,
         customerArea: activeAddress.area,
-        addressSnapshot: `${activeAddress.label} - ${activeAddress.street}، ${activeAddress.area}، ${activeAddress.city}`,
+        addressSnapshot: resolvedDeliveryAddress || fallbackDeliveryAddress,
+        customerLatitude: activeLat,
+        customerLongitude: activeLng,
         items: items.map((i) => ({
           productId: i.productId,
           weightOptionId: i.weightOptionId ?? undefined,
@@ -235,9 +250,7 @@ export function CartCheckoutScreen() {
                     className="font-body text-body-sm text-on-surface-muted text-right"
                     numberOfLines={1}
                   >
-                    {activeAddress
-                      ? `${activeAddress.street}، ${activeAddress.area}، ${activeAddress.city}`
-                      : '14 شارع فوزي معاذ، سموحة، الإسكندرية'}
+                    {resolvedDeliveryAddress}
                   </Text>
                 </View>
               </View>

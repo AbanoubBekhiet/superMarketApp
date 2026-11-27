@@ -23,14 +23,13 @@ import { EmptyState } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useProducts } from '@/features/products/hooks/useProducts';
 import { updateProfileInfo } from '@/features/profile/api/profileApi';
+import { AddressPickerModal } from '@/features/profile/components/AddressPickerModal';
 import { NotificationCardItem } from '@/features/profile/components/NotificationCardItem';
 import {
-  useAddAddress,
   useAddresses,
   useAppSettings,
   useFavoriteIds,
   useNotifications,
-  useSetDefaultAddress,
 } from '@/features/profile/hooks/useProfile';
 import { formatCurrency } from '@/lib/format';
 import { getLocalImage } from '@/lib/images';
@@ -64,18 +63,12 @@ export function ProfileScreen() {
   const showToast = useUiStore((s) => s.showToast);
 
   const { data: addresses = [] } = useAddresses();
-  const { mutateAsync: addAddress } = useAddAddress();
-  const { mutate: setDefaultAddress } = useSetDefaultAddress();
   const { data: products = [] } = useProducts();
   const { data: notifications = [] } = useNotifications();
 
   const [modal, setModal] = useState<ActiveModal>(null);
   const [editName, setEditName] = useState(user?.name ?? '');
   const [editPhone, setEditPhone] = useState(user?.phone ?? '');
-
-  const [addrLabel, setAddrLabel] = useState('');
-  const [addrStreet, setAddrStreet] = useState('');
-  const [addrArea, setAddrArea] = useState('');
 
   const favoriteProducts = products.filter((p) => favoriteIds.includes(p.id));
   const supportPhone =
@@ -90,21 +83,6 @@ export function ProfileScreen() {
     await updateUser({ name: editName.trim(), phone: editPhone.trim() });
     showToast(STRINGS.profile.updatedSuccess);
     setModal(null);
-  };
-
-  const handleAddAddress = async () => {
-    if (!addrLabel.trim() || !addrStreet.trim() || !addrArea.trim()) return;
-    await addAddress({
-      label: addrLabel.trim(),
-      street: addrStreet.trim(),
-      area: addrArea.trim(),
-      city: 'الإسكندرية',
-      isDefault: true,
-    });
-    setAddrLabel('');
-    setAddrStreet('');
-    setAddrArea('');
-    showToast(STRINGS.profile.updatedSuccess);
   };
 
   const handleLogout = async () => {
@@ -266,9 +244,16 @@ export function ProfileScreen() {
         </Button>
       </ScrollView>
 
+      {/* Single Address Edit Modal */}
+      <AddressPickerModal
+        visible={modal === 'addresses'}
+        addresses={addresses}
+        onClose={() => setModal(null)}
+      />
+
       {/* Contextual Modals */}
       <Modal
-        visible={modal !== null}
+        visible={modal !== null && modal !== 'addresses'}
         transparent
         animationType="fade"
         onRequestClose={() => setModal(null)}
@@ -285,13 +270,11 @@ export function ProfileScreen() {
               <Text className="font-headline text-title-lg text-on-surface">
                 {modal === 'edit'
                   ? STRINGS.profile.editProfileTitle
-                  : modal === 'addresses'
-                    ? STRINGS.profile.savedAddresses
-                    : modal === 'favorites'
-                      ? STRINGS.profile.favorites
-                      : modal === 'support'
-                        ? STRINGS.profile.supportModalTitle
-                        : STRINGS.profile.notificationsOffers}
+                  : modal === 'favorites'
+                    ? STRINGS.profile.favorites
+                    : modal === 'support'
+                      ? STRINGS.profile.supportModalTitle
+                      : STRINGS.profile.notificationsOffers}
               </Text>
               <Pressable onPress={() => setModal(null)} hitSlop={8}>
                 <X size={20} color={colors.onSurfaceMuted} />
@@ -318,54 +301,6 @@ export function ProfileScreen() {
                   onPress={handleSaveProfile}
                 />
               </View>
-            ) : null}
-
-            {modal === 'addresses' ? (
-              <ScrollView contentContainerClassName="gap-md">
-                {addresses.map((addr) => (
-                  <Pressable
-                    key={addr.id}
-                    onPress={() => setDefaultAddress(addr.id)}
-                    className={`p-md rounded-lg border ${
-                      addr.isDefault
-                        ? 'bg-mint-surface border-primary'
-                        : 'bg-surface border-outline-subtle'
-                    }`}
-                  >
-                    <Text className="font-title text-title-sm text-on-surface text-right">
-                      {addr.label} — {addr.area}
-                    </Text>
-                    <Text className="font-body text-body-sm text-on-surface-muted text-right">
-                      {addr.street}، {addr.city}
-                    </Text>
-                  </Pressable>
-                ))}
-                <View className="pt-sm border-t border-outline-subtle gap-sm">
-                  <Text className="font-title text-title-sm text-on-surface text-right">
-                    {STRINGS.profile.addAddressTitle}
-                  </Text>
-                  <Input
-                    placeholder={STRINGS.profile.addressLabelPlaceholder}
-                    value={addrLabel}
-                    onChangeText={setAddrLabel}
-                  />
-                  <Input
-                    placeholder={STRINGS.profile.addressStreetPlaceholder}
-                    value={addrStreet}
-                    onChangeText={setAddrStreet}
-                  />
-                  <Input
-                    placeholder={STRINGS.profile.addressAreaPlaceholder}
-                    value={addrArea}
-                    onChangeText={setAddrArea}
-                  />
-                  <Button
-                    variant="mint-outline"
-                    label={STRINGS.common.save}
-                    onPress={handleAddAddress}
-                  />
-                </View>
-              </ScrollView>
             ) : null}
 
             {modal === 'favorites' ? (

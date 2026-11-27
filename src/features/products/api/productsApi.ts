@@ -20,6 +20,7 @@ export interface QuickProductPayload {
   categoryId?: string;
   unit?: string;
   piecesPerUnit?: number;
+  isActive?: boolean;
   imageUrl?: string | null;
 }
 
@@ -142,7 +143,7 @@ export async function createProduct(payload: QuickProductPayload): Promise<Produ
     unit,
     piecesPerUnit,
     imageUrl: payload.imageUrl ?? 'local://logo',
-    isActive: true,
+    isActive: payload.isActive ?? true,
     isFeatured: false,
     isDailyOffer: false,
     weights: [
@@ -200,6 +201,7 @@ export async function updateProduct(
     ...(nextUnit ? { unit: nextUnit } : {}),
     ...(nextPieces !== undefined ? { piecesPerUnit: nextPieces } : {}),
     ...(nextWeights ? { weights: nextWeights } : {}),
+    ...(payload.isActive !== undefined ? { isActive: payload.isActive } : {}),
     ...(payload.imageUrl !== undefined ? { imageUrl: payload.imageUrl } : {}),
     updatedAt: new Date().toISOString(),
   });

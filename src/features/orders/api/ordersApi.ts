@@ -30,6 +30,8 @@ export interface CreateOrderPayload {
   addressId?: string;
   addressSnapshot: string;
   customerArea: string;
+  customerLatitude?: number | null;
+  customerLongitude?: number | null;
   vehicleId?: string | null;
   deliverySlot: DeliveryTimeSlot;
   paymentMethod: PaymentMethod;
@@ -56,6 +58,61 @@ export async function fetchOrders(
       );
 
   let orders = snap.docs.map((d) => mapOrder(d.id, d.data() as FirestoreOrderDoc));
+
+  if (isStaff) {
+    const enrichCustomerIds = Array.from(
+      new Set(
+        orders
+          .filter(
+            (o) =>
+              o.customerId &&
+              (!o.customerPhone || (o.customerLatitude == null && o.customerLongitude == null)),
+          )
+          .map((o) => o.customerId),
+      ),
+    );
+    if (enrichCustomerIds.length > 0) {
+      const userInfos = await Promise.all(
+        enrichCustomerIds.map(async (customerId) => {
+          const [uSnap, addrSnap] = await Promise.all([
+            getDoc(doc(firestoreDb, 'users', customerId)).catch(() => null),
+            getDocs(collection(firestoreDb, 'users', customerId, 'addresses')).catch(() => null),
+          ]);
+          const uData = uSnap?.exists()
+            ? (uSnap.data() as {
+                phone?: string | null;
+                latitude?: number | null;
+                longitude?: number | null;
+              })
+            : null;
+          const addrs = addrSnap?.docs.map((d) => d.data() as {
+            isDefault?: boolean;
+            latitude?: number | null;
+            longitude?: number | null;
+          }) ?? [];
+          const primaryAddr = addrs.find((a) => a.isDefault) ?? addrs[0];
+          return {
+            customerId,
+            phone: uData?.phone?.trim() || undefined,
+            latitude: primaryAddr?.latitude ?? uData?.latitude ?? null,
+            longitude: primaryAddr?.longitude ?? uData?.longitude ?? null,
+          };
+        }),
+      );
+      const infoByUserId = new Map(userInfos.map((info) => [info.customerId, info]));
+      orders = orders.map((o) => {
+        const info = infoByUserId.get(o.customerId);
+        if (!info) return o;
+        return {
+          ...o,
+          customerPhone: o.customerPhone ?? info.phone,
+          customerLatitude: o.customerLatitude ?? info.latitude,
+          customerLongitude: o.customerLongitude ?? info.longitude,
+        };
+      });
+    }
+  }
+
   if (params.status && params.status !== 'all') {
     orders = orders.filter((o) => o.status === params.status);
   }
@@ -63,8 +120,10 @@ export async function fetchOrders(
 }
 
 export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
-  const uid = firebaseAuth.currentUser?.uid ?? useAuthStore.getState().user?.id;
-  const customerName = useAuthStore.getState().user?.name ?? 'عميل طازج';
+  const authUser = useAuthStore.getState().user;
+  const uid = firebaseAuth.currentUser?.uid ?? authUser?.id;
+  const customerName = authUser?.name ?? 'عميل طازج';
+  const customerPhone = authUser?.phone?.trim() || null;
   if (!uid) throw new Error('يرجى تسجيل الدخول أولاً');
   if (payload.items.length === 0) throw new Error('السلة فارغة');
 
@@ -175,8 +234,11 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       code,
       userId: uid,
       customerNameSnapshot: customerName,
+      customerPhoneSnapshot: customerPhone,
       customerAreaSnapshot: payload.customerArea,
       addressSnapshot: payload.addressSnapshot,
+      customerLatitude: payload.customerLatitude ?? authUser?.latitude ?? null,
+      customerLongitude: payload.customerLongitude ?? authUser?.longitude ?? null,
       subtotal,
       deliveryFee,
       freeDeliveryThreshold: freeThreshold,

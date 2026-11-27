@@ -33,7 +33,9 @@ import {
   useSetDefaultAddress,
 } from '@/features/profile/hooks/useProfile';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { useResolvedGeoAddress } from '@/lib/geocoding';
 import { getLocalImage } from '@/lib/images';
+import { useAuthStore } from '@/store/authStore';
 import { colors } from '@/theme/tokens';
 import type { Product } from '@/types/domain';
 
@@ -127,7 +129,15 @@ export function HomeScreen() {
   const { data: notifications = [] } = useNotifications();
   const { mutate: markAllRead } = useMarkAllNotificationsRead();
 
+  const user = useAuthStore((s) => s.user);
   const defaultAddress = addresses.find((a) => a.isDefault) ?? addresses[0];
+  const { address: resolvedHeaderAddress } = useResolvedGeoAddress({
+    latitude: defaultAddress?.latitude ?? user?.latitude,
+    longitude: defaultAddress?.longitude ?? user?.longitude,
+    fallback: defaultAddress
+      ? `${defaultAddress.city}، ${defaultAddress.area}`
+      : STRINGS.home.defaultLocation,
+  });
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const bestSellers = useMemo(
@@ -258,9 +268,7 @@ export function HomeScreen() {
             </Text>
             <View className="flex-row items-center gap-xs">
               <Text className="font-title text-title-sm text-on-surface" numberOfLines={1}>
-                {defaultAddress
-                  ? `${defaultAddress.city}، ${defaultAddress.area}`
-                  : STRINGS.home.defaultLocation}
+                {resolvedHeaderAddress}
               </Text>
               <ChevronDown size={18} color={colors.primary} />
             </View>

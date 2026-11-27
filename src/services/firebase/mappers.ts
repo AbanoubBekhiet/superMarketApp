@@ -60,8 +60,11 @@ export interface FirestoreOrderDoc {
   code: string;
   userId: string;
   customerNameSnapshot: string;
+  customerPhoneSnapshot?: string | null;
   customerAreaSnapshot: string;
   addressSnapshot: string;
+  customerLatitude?: number | null;
+  customerLongitude?: number | null;
   subtotal: number;
   deliveryFee: number;
   freeDeliveryThreshold?: number;
@@ -218,8 +221,11 @@ export function mapOrder(id: string, row: FirestoreOrderDoc): Order {
     code: row.code,
     customerId: row.userId,
     customerName: row.customerNameSnapshot,
+    customerPhone: row.customerPhoneSnapshot ?? undefined,
     customerArea: row.customerAreaSnapshot,
     customerAddress: row.addressSnapshot,
+    customerLatitude: row.customerLatitude ?? null,
+    customerLongitude: row.customerLongitude ?? null,
     itemsCount: items.reduce((sum, i) => sum + i.quantity, 0),
     items: items.map((item) => ({
       productId: item.productId,

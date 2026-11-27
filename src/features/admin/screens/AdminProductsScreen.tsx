@@ -1,10 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { ImagePlus, Pencil, Plus, Trash2, X } from 'lucide-react-native';
-import { useState } from 'react';
+import { ImagePlus, Pencil, Plus, Search, Trash2, X } from 'lucide-react-native';
+import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 import { Button } from '@/components/ui/Button';
@@ -42,6 +51,7 @@ const quickProductSchema = z.object({
     .number()
     .int(STRINGS.common.positiveNumber)
     .min(1, STRINGS.common.positiveNumber),
+  isActive: z.boolean(),
 });
 
 type QuickProductForm = z.input<typeof quickProductSchema>;
@@ -56,6 +66,7 @@ export function AdminProductsScreen() {
   const { mutateAsync: deleteProduct, isPending: isDeleting } = useDeleteProduct();
 
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [searchQuery, setSearchQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
@@ -77,6 +88,7 @@ export function AdminProductsScreen() {
       categoryId: '',
       unit: 'علبة',
       piecesPerUnit: '1',
+      isActive: true,
     },
   });
 
@@ -91,6 +103,7 @@ export function AdminProductsScreen() {
       categoryId: categories[0]?.id ?? '',
       unit: 'علبة',
       piecesPerUnit: '1',
+      isActive: true,
     });
     setModalOpen(true);
   };
@@ -111,6 +124,7 @@ export function AdminProductsScreen() {
       categoryId: product.categoryId,
       unit: matchedUnit,
       piecesPerUnit: String(product.piecesPerUnit ?? 1),
+      isActive: product.isActive ?? true,
     });
     setModalOpen(true);
   };
@@ -165,6 +179,7 @@ export function AdminProductsScreen() {
             categoryId: resolvedCategoryId,
             unit: values.unit,
             piecesPerUnit: values.piecesPerUnit,
+            isActive: values.isActive,
             ...(imageUrl ? { imageUrl } : {}),
           },
         });
@@ -176,6 +191,7 @@ export function AdminProductsScreen() {
           categoryId: resolvedCategoryId,
           unit: values.unit,
           piecesPerUnit: values.piecesPerUnit,
+          isActive: values.isActive,
           ...(imageUrl ? { imageUrl } : {}),
         });
       }
@@ -187,12 +203,37 @@ export function AdminProductsScreen() {
     }
   };
 
-  const visibleProducts = products.slice(0, visibleCount);
-  const hasMore = visibleProducts.length < products.length;
+  const handleToggleVisibility = async (product: Product) => {
+    try {
+      const nextActive = !(product.isActive ?? true);
+      await updateProduct({
+        id: product.id,
+        payload: { isActive: nextActive },
+      });
+      showToast(STRINGS.admin.productSaved);
+    } catch {
+      showToast(STRINGS.common.errorMessage, 'error');
+    }
+  };
+
+  const filteredProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.categoryName.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.unitLabel.toLowerCase().includes(q),
+    );
+  }, [products, searchQuery]);
+
+  const visibleProducts = filteredProducts.slice(0, visibleCount);
+  const hasMore = visibleProducts.length < filteredProducts.length;
 
   const handleLoadMore = () => {
     if (hasMore) {
-      setVisibleCount((prev) => Math.min(products.length, prev + PAGE_SIZE));
+      setVisibleCount((prev) => Math.min(filteredProducts.length, prev + PAGE_SIZE));
     }
   };
 
@@ -210,11 +251,39 @@ export function AdminProductsScreen() {
         }
       />
 
+      <View className="px-page-x pt-md pb-xs">
+        <View className="flex-row items-center gap-sm bg-surface-card border border-outline-subtle rounded-md px-md min-h-[44px]">
+          <Search size={18} color={colors.onSurfaceSubtle} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              setVisibleCount(PAGE_SIZE);
+            }}
+            placeholder={STRINGS.admin.searchProductsPlaceholder}
+            placeholderTextColor={colors.onSurfaceSubtle}
+            textAlign="right"
+            className="flex-1 font-body text-body-md text-on-surface py-xs"
+          />
+          {searchQuery ? (
+            <Pressable
+              onPress={() => {
+                setSearchQuery('');
+                setVisibleCount(PAGE_SIZE);
+              }}
+              hitSlop={8}
+            >
+              <X size={16} color={colors.onSurfaceSubtle} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+
       {isLoading ? (
         <ListSkeleton count={4} />
       ) : isError ? (
         <ErrorState onRetry={refetch} />
-      ) : products.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <EmptyState />
       ) : (
         <FlashList
@@ -222,8 +291,10 @@ export function AdminProductsScreen() {
           keyExtractor={(item) => item.id}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.4}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}
-          renderItem={({ item: product }) => (
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24 }}
+          renderItem={({ item: product }) => {
+            const isProductActive = product.isActive ?? true;
+            return (
             <Card
               padded={false}
               className="p-md flex-row items-center gap-md mb-md"
@@ -258,6 +329,27 @@ export function AdminProductsScreen() {
                   </Text>
                   <View className="flex-row items-center gap-xs">
                     <Pressable
+                      onPress={() => handleToggleVisibility(product)}
+                      hitSlop={6}
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: isProductActive }}
+                      className={`px-sm py-xs rounded-full border ${
+                        isProductActive
+                          ? 'bg-mint-surface border-primary/40'
+                          : 'bg-surface-subtle border-outline-subtle'
+                      }`}
+                    >
+                      <Text
+                        className={`font-label-bold text-[11px] ${
+                          isProductActive ? 'text-primary' : 'text-on-surface-muted'
+                        }`}
+                      >
+                        {isProductActive
+                          ? STRINGS.admin.productVisibleBadge
+                          : STRINGS.admin.productHiddenBadge}
+                      </Text>
+                    </Pressable>
+                    <Pressable
                       onPress={() => handleSelectEdit(product)}
                       hitSlop={8}
                       accessibilityRole="button"
@@ -279,16 +371,17 @@ export function AdminProductsScreen() {
                 </View>
               </View>
             </Card>
-          )}
+          );
+          }}
           ListFooterComponent={
-            products.length > 0 ? (
+            filteredProducts.length > 0 ? (
               <View className="py-md items-center gap-xs">
                 {hasMore ? <ActivityIndicator size="small" color={colors.primary} /> : null}
                 <Text
                   className="font-body text-body-sm text-on-surface-subtle"
                   style={{ fontVariant: ['tabular-nums'] }}
                 >
-                  عرض {formatNumber(visibleProducts.length)} من {formatNumber(products.length)}
+                  عرض {formatNumber(visibleProducts.length)} من {formatNumber(filteredProducts.length)}
                 </Text>
               </View>
             ) : null
@@ -415,6 +508,24 @@ export function AdminProductsScreen() {
                     keyboardType="number-pad"
                     error={errors.piecesPerUnit?.message}
                   />
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="isActive"
+                render={({ field: { value, onChange } }) => (
+                  <View className="flex-row items-center justify-between p-md rounded-md bg-surface border border-outline-subtle">
+                    <Text className="font-title text-title-sm text-on-surface">
+                      {STRINGS.admin.productVisibleLabel}
+                    </Text>
+                    <Switch
+                      value={value}
+                      onValueChange={onChange}
+                      trackColor={{ false: colors.outlineSubtle, true: colors.softAccent }}
+                      thumbColor={value ? colors.primary : colors.onSurfaceSubtle}
+                    />
+                  </View>
                 )}
               />
 

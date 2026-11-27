@@ -14,7 +14,7 @@ export function ensureForcedRtl(): void {
   I18nManager.allowRTL(true);
   if (!I18nManager.isRTL) {
     I18nManager.forceRTL(true);
-    if (!reloadAttempted && typeof DevSettings?.reload === 'function') {
+    if (__DEV__ && !reloadAttempted && typeof DevSettings?.reload === 'function') {
       reloadAttempted = true;
       DevSettings.reload();
     }

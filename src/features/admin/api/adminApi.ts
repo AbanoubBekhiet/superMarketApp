@@ -29,11 +29,23 @@ export async function fetchAdminOverview(): Promise<DashboardOverview> {
     (d) => !(d.data() as { deletedAt?: string | null }).deletedAt,
   );
 
+  const now = new Date();
   const nonCancelledOrders = orders.filter((o) => o.status !== 'cancelled');
-  const totalRevenue = Number(nonCancelledOrders.reduce((acc, o) => acc + o.total, 0).toFixed(2));
+  const currentMonthOrders = nonCancelledOrders.filter((o) => {
+    const placed = new Date(o.placedAt);
+    return (
+      !Number.isNaN(placed.getTime()) &&
+      placed.getFullYear() === now.getFullYear() &&
+      placed.getMonth() === now.getMonth()
+    );
+  });
+  const totalRevenue = Number(
+    currentMonthOrders.reduce((acc, o) => acc + o.total, 0).toFixed(2),
+  );
   const activeOrders = orders.filter((o) =>
     ['pending', 'processing', 'on_the_way'].includes(o.status),
   );
+  const pendingOrders = orders.filter((o) => o.status === 'pending');
   const processingOrders = orders.filter((o) => o.status === 'processing');
 
   const etas = orders
@@ -46,7 +58,6 @@ export async function fetchAdminOverview(): Promise<DashboardOverview> {
     (p) => (p.isActive ?? true) && (p.stockQuantity ?? 1000) <= (p.lowStockThreshold ?? 10),
   );
 
-  const now = new Date();
   const weeklyRevenue = Array.from({ length: 7 }).map((_, offsetFromEnd) => {
     const dayDate = new Date(now);
     dayDate.setDate(now.getDate() - (6 - offsetFromEnd));
@@ -132,8 +143,9 @@ export async function fetchAdminOverview(): Promise<DashboardOverview> {
 
   return {
     totalRevenue,
-    revenueGrowthPercent: 14.5,
+    revenueGrowthPercent: 0,
     activeOrdersCount: activeOrders.length,
+    pendingOrdersCount: pendingOrders.length,
     processingOrdersCount: processingOrders.length,
     avgDeliveryMinutes,
     totalProductsCount: products.length,
