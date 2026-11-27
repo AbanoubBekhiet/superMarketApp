@@ -16,6 +16,7 @@ export const colors = {
   surfaceCard: '#FFFFFF',
   onSurfaceCard: '#1F241F',
   surfaceSubtle: '#EFF1EF',
+  splashBackground: '#ECECEE',
   outline: '#ACC5A6',
   outlineSubtle: '#DFE4DC',
   error: '#BA1A1A',

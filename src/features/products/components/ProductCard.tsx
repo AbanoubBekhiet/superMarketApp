@@ -144,6 +144,7 @@ export function ProductCard({ product }: ProductCardProps) {
           </Text>
           <Text className="font-body text-body-sm text-on-surface-subtle text-right">
             {product.unitLabel}
+            {product.piecesPerUnit ? ` • ${formatNumber(product.piecesPerUnit)} قطعة` : ''}
           </Text>
         </Pressable>
       </View>

@@ -57,6 +57,9 @@
     "prettier": "^3.10.1",
     "typescript": "~6.0.3"
   },
+  "overrides": {
+    "@react-native-async-storage/async-storage": "$@react-native-async-storage/async-storage"
+  },
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",

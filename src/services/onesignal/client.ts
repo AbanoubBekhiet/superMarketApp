@@ -1,5 +1,5 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { Alert, Platform, TurboModuleRegistry } from 'react-native';
+import { Platform, TurboModuleRegistry } from 'react-native';
 
 import type {
   LogLevel as LogLevelEnum,
@@ -32,16 +32,12 @@ function loadOneSignalPackage(): OneSignalPackage | null {
   }
 }
 
-function isRegisteredSubscriptionId(subscriptionId: string | null | undefined): boolean {
-  return Boolean(subscriptionId) && !subscriptionId!.startsWith('local-');
-}
-
 /**
  * Centralized OneSignal SDK wrapper isolating all direct SDK interactions.
  */
 class OneSignalService {
   private initializedAppId: string | null = null;
-  private verificationDialogShown = false;
+  private permissionRequested = false;
   private subscriptionObserverAttached = false;
 
   public isAvailable(): boolean {
@@ -65,6 +61,7 @@ class OneSignalService {
       OneSignal.initialize(cleanAppId);
       this.initializedAppId = cleanAppId;
       this.setupPushSubscriptionObserver(OneSignal);
+      void this.ensurePermissionAndOptIn(OneSignal);
     }
 
     const clickListener = (event: NotificationClickEvent): void => {
@@ -85,43 +82,48 @@ class OneSignalService {
     };
   }
 
+  private async ensurePermissionAndOptIn(OneSignal: typeof OneSignalType): Promise<void> {
+    if (this.permissionRequested) {
+      OneSignal.User.pushSubscription.optIn();
+      return;
+    }
+    this.permissionRequested = true;
+    try {
+      const granted = await OneSignal.Notifications.requestPermission(true);
+      if (granted) {
+        OneSignal.User.pushSubscription.optIn();
+      }
+    } catch {
+      // Ignore permission prompt cancellation or unsupported environments
+    }
+  }
+
   private setupPushSubscriptionObserver(OneSignal: typeof OneSignalType): void {
     if (this.subscriptionObserverAttached) return;
     this.subscriptionObserverAttached = true;
 
-    const maybeShowVerificationDialog = (subscriptionId: string | null | undefined): void => {
-      if (isRegisteredSubscriptionId(subscriptionId) && !this.verificationDialogShown) {
-        this.verificationDialogShown = true;
-        Alert.alert(
-          'Your OneSignal SDK integration is complete!',
-          'You can now send Push Notifications & In-App Messages through OneSignal. Tap below to enable push notifications.',
-          [
-            {
-              text: 'Got it',
-              onPress: () => {
-                OneSignal.Notifications.requestPermission(true);
-              },
-            },
-          ],
-          { cancelable: false },
-        );
-      }
-    };
-
     OneSignal.User.pushSubscription.addEventListener(
       'change',
       (subscription: PushSubscriptionChangedState) => {
-        maybeShowVerificationDialog(subscription.current.id);
+        if (subscription.current.token && !subscription.current.optedIn) {
+          OneSignal.User.pushSubscription.optIn();
+        }
       },
     );
-
-    void OneSignal.User.pushSubscription.getIdAsync().then(maybeShowVerificationDialog);
   }
 
-  public login(externalUserId: string): void {
+  public login(externalUserId: string, role?: 'customer' | 'staff'): void {
     if (!externalUserId) return;
     const pkg = loadOneSignalPackage();
-    pkg?.OneSignal.login(externalUserId);
+    if (!pkg) return;
+
+    const { OneSignal } = pkg;
+    OneSignal.login(externalUserId);
+    if (role) {
+      OneSignal.User.addTag('role', role);
+    }
+    OneSignal.User.pushSubscription.optIn();
+    void this.ensurePermissionAndOptIn(OneSignal);
   }
 
   public logout(): void {
@@ -149,7 +151,11 @@ class OneSignalService {
   public async requestPermission(): Promise<boolean> {
     const pkg = loadOneSignalPackage();
     if (!pkg) return false;
-    return pkg.OneSignal.Notifications.requestPermission(true);
+    const granted = await pkg.OneSignal.Notifications.requestPermission(true);
+    if (granted) {
+      pkg.OneSignal.User.pushSubscription.optIn();
+    }
+    return granted;
   }
 }
 

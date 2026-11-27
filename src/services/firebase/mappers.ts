@@ -36,6 +36,7 @@ export interface FirestoreProductDoc {
   sku?: string;
   barcode?: string | null;
   unit?: string;
+  piecesPerUnit?: number;
   stockQuantity?: number;
   lowStockThreshold?: number;
   imageUrl?: string | null;
@@ -191,6 +192,10 @@ export function mapProduct(
     description: row.description ?? '',
     imageKey: row.imageUrl ?? 'local://logo',
     unitLabel: row.unit ?? 'عبوة',
+    piecesPerUnit:
+      typeof row.piecesPerUnit === 'number' && row.piecesPerUnit > 0
+        ? Math.round(row.piecesPerUnit)
+        : undefined,
     price: effectivePrice,
     oldPrice,
     discountPercent,

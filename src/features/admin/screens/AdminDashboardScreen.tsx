@@ -27,6 +27,7 @@ import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui/StateViews
 import { STRINGS } from '@/constants/strings';
 import { useAdminOverview } from '@/features/admin/hooks/useAdminOverview';
 import { useActiveCarts } from '@/features/cart/hooks/useActiveCarts';
+import { NotificationCardItem } from '@/features/profile/components/NotificationCardItem';
 import {
   useAppSettings,
   useBanners,
@@ -457,25 +458,11 @@ export function AdminDashboardScreen() {
                 </Pressable>
               </View>
             </View>
-            <ScrollView contentContainerClassName="gap-sm">
+            <ScrollView contentContainerClassName="gap-sm pb-sm" showsVerticalScrollIndicator={false}>
               {notifications.length === 0 ? (
                 <EmptyState title={STRINGS.common.noNotifications} />
               ) : (
-                notifications.map((n) => (
-                  <View
-                    key={n.id}
-                    className={`p-md rounded-lg border border-outline-subtle gap-xs ${
-                      n.isRead ? 'bg-surface-card' : 'bg-mint-surface/40'
-                    }`}
-                  >
-                    <Text className="font-title text-title-sm text-on-surface text-right">
-                      {n.title}
-                    </Text>
-                    <Text className="font-body text-body-sm text-on-surface-muted text-right">
-                      {n.body}
-                    </Text>
-                  </View>
-                ))
+                notifications.map((n) => <NotificationCardItem key={n.id} notification={n} />)
               )}
             </ScrollView>
           </Pressable>

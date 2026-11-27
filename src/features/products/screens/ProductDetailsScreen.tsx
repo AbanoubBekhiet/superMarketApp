@@ -12,7 +12,7 @@ import { ErrorState, ListSkeleton } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useProduct } from '@/features/products/hooks/useProducts';
 import { useFavoriteIds, useToggleFavorite } from '@/features/profile/hooks/useProfile';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatNumber } from '@/lib/format';
 import { getLocalImage } from '@/lib/images';
 import { useCartStore } from '@/store/cartStore';
 import { useUiStore } from '@/store/uiStore';
@@ -160,6 +160,13 @@ export function ProductDetailsScreen() {
             {product.name}
           </Text>
 
+          <Text className="font-body text-body-md text-on-surface-muted text-right">
+            الوحدة: {product.unitLabel}
+            {product.piecesPerUnit
+              ? ` (${formatNumber(product.piecesPerUnit)} قطعة في الوحدة)`
+              : ''}
+          </Text>
+
           <View className="flex-row items-center gap-md">
             <Text
               className="font-headline text-headline-md text-primary"
@@ -209,6 +216,9 @@ export function ProductDetailsScreen() {
                       }`}
                     >
                       {option.label}
+                      {product.weights.length === 1 && product.piecesPerUnit
+                        ? ` (${formatNumber(product.piecesPerUnit)} قطعة)`
+                        : ''}
                     </Text>
                   </Pressable>
                 );

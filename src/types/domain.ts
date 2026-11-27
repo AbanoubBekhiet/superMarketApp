@@ -99,6 +99,7 @@ export interface Product {
   description: string;
   imageKey: string;
   unitLabel: string;
+  piecesPerUnit?: number;
   price: number;
   oldPrice?: number;
   discountPercent?: number;

@@ -31,11 +31,17 @@ import { colors } from '@/theme/tokens';
 import type { Product } from '@/types/domain';
 
 const PAGE_SIZE = 12;
+const PRODUCT_UNITS = ['شريط', 'علبة', 'كرتونة'] as const;
 
 const quickProductSchema = z.object({
   name: z.string().trim().min(2, STRINGS.common.requiredField),
   price: z.coerce.number().positive(STRINGS.common.positiveNumber),
   categoryId: z.string().optional(),
+  unit: z.enum(PRODUCT_UNITS),
+  piecesPerUnit: z.coerce
+    .number()
+    .int(STRINGS.common.positiveNumber)
+    .min(1, STRINGS.common.positiveNumber),
 });
 
 type QuickProductForm = z.input<typeof quickProductSchema>;
@@ -69,6 +75,8 @@ export function AdminProductsScreen() {
       name: '',
       price: '',
       categoryId: '',
+      unit: 'علبة',
+      piecesPerUnit: '1',
     },
   });
 
@@ -81,6 +89,8 @@ export function AdminProductsScreen() {
       name: '',
       price: '',
       categoryId: categories[0]?.id ?? '',
+      unit: 'علبة',
+      piecesPerUnit: '1',
     });
     setModalOpen(true);
   };
@@ -90,10 +100,17 @@ export function AdminProductsScreen() {
     setDraftProductId(product.id);
     setImageUrl(product.imageKey);
     setPreviewUri(null);
+    const matchedUnit = PRODUCT_UNITS.includes(
+      product.unitLabel as (typeof PRODUCT_UNITS)[number],
+    )
+      ? (product.unitLabel as (typeof PRODUCT_UNITS)[number])
+      : 'علبة';
     reset({
       name: product.name,
       price: String(product.price),
       categoryId: product.categoryId,
+      unit: matchedUnit,
+      piecesPerUnit: String(product.piecesPerUnit ?? 1),
     });
     setModalOpen(true);
   };
@@ -146,6 +163,8 @@ export function AdminProductsScreen() {
             name: values.name,
             price: values.price,
             categoryId: resolvedCategoryId,
+            unit: values.unit,
+            piecesPerUnit: values.piecesPerUnit,
             ...(imageUrl ? { imageUrl } : {}),
           },
         });
@@ -155,6 +174,8 @@ export function AdminProductsScreen() {
           name: values.name,
           price: values.price,
           categoryId: resolvedCategoryId,
+          unit: values.unit,
+          piecesPerUnit: values.piecesPerUnit,
           ...(imageUrl ? { imageUrl } : {}),
         });
       }
@@ -220,11 +241,14 @@ export function AdminProductsScreen() {
                 >
                   {product.name}
                 </Text>
-                {product.categoryName ? (
-                  <Text className="font-body text-body-sm text-on-surface-subtle text-right" numberOfLines={1}>
-                    {product.categoryName}
-                  </Text>
-                ) : null}
+                <Text className="font-body text-body-sm text-on-surface-subtle text-right" numberOfLines={1}>
+                  {[
+                    product.categoryName,
+                    `${product.unitLabel}${product.piecesPerUnit ? ` (${formatNumber(product.piecesPerUnit)} ${STRINGS.admin.piecesSuffix})` : ''}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' • ')}
+                </Text>
                 <View className="flex-row items-center justify-between gap-xs pt-xs">
                   <Text
                     className="font-headline text-title-sm text-primary"
@@ -352,6 +376,44 @@ export function AdminProductsScreen() {
                     onBlur={onBlur}
                     keyboardType="numeric"
                     error={errors.price?.message}
+                  />
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="unit"
+                render={({ field: { value, onChange } }) => (
+                  <View className="gap-xs">
+                    <Text className="font-label text-label-md text-on-surface text-right">
+                      {STRINGS.admin.productUnitLabel}
+                    </Text>
+                    <View className="flex-row gap-xs flex-wrap">
+                      {PRODUCT_UNITS.map((unitOption) => (
+                        <FilterChip
+                          key={unitOption}
+                          label={unitOption}
+                          active={value === unitOption}
+                          onPress={() => onChange(unitOption)}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="piecesPerUnit"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Input
+                    label={STRINGS.admin.productPiecesLabel}
+                    placeholder={STRINGS.admin.productPiecesPlaceholder}
+                    value={String(value ?? '')}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    keyboardType="number-pad"
+                    error={errors.piecesPerUnit?.message}
                   />
                 )}
               />

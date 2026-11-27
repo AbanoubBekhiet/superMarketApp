@@ -18,6 +18,8 @@ export interface QuickProductPayload {
   price: number;
   stock?: number;
   categoryId?: string;
+  unit?: string;
+  piecesPerUnit?: number;
   imageUrl?: string | null;
 }
 
@@ -122,6 +124,10 @@ export async function createProduct(payload: QuickProductPayload): Promise<Produ
   const now = new Date().toISOString();
   const sku = `طز-${Math.floor(1000 + Math.random() * 9000)}`;
 
+  const unit = payload.unit?.trim() || 'علبة';
+  const piecesPerUnit =
+    payload.piecesPerUnit && payload.piecesPerUnit > 0 ? Math.round(payload.piecesPerUnit) : 1;
+
   const docPayload = {
     categoryId: fallbackCategoryId,
     categoryName,
@@ -133,7 +139,8 @@ export async function createProduct(payload: QuickProductPayload): Promise<Produ
     salePrice: null,
     stockQuantity: payload.stock ?? 1000,
     lowStockThreshold: 10,
-    unit: 'عبوة',
+    unit,
+    piecesPerUnit,
     imageUrl: payload.imageUrl ?? 'local://logo',
     isActive: true,
     isFeatured: false,
@@ -141,7 +148,7 @@ export async function createProduct(payload: QuickProductPayload): Promise<Produ
     weights: [
       {
         id: `w-${Date.now()}`,
-        label: 'عبوة',
+        label: unit,
         price: payload.price,
         salePrice: null,
         sortOrder: 0,
@@ -175,11 +182,24 @@ export async function updateProduct(
   if (!snap.exists()) throw new Error('المنتج غير موجود');
   const current = snap.data() as FirestoreProductDoc;
 
+  const nextUnit = payload.unit?.trim();
+  const nextPieces =
+    payload.piecesPerUnit && payload.piecesPerUnit > 0
+      ? Math.round(payload.piecesPerUnit)
+      : undefined;
+  const nextWeights =
+    nextUnit && current.weights && current.weights.length > 0
+      ? current.weights.map((w, idx) => (idx === 0 ? { ...w, label: nextUnit } : w))
+      : undefined;
+
   await updateDoc(ref, {
     ...(payload.categoryId !== undefined ? { categoryId: payload.categoryId } : {}),
     ...(payload.name !== undefined ? { name: payload.name.trim() } : {}),
     ...(payload.price !== undefined ? { price: payload.price } : {}),
     ...(payload.stock !== undefined ? { stockQuantity: payload.stock } : {}),
+    ...(nextUnit ? { unit: nextUnit } : {}),
+    ...(nextPieces !== undefined ? { piecesPerUnit: nextPieces } : {}),
+    ...(nextWeights ? { weights: nextWeights } : {}),
     ...(payload.imageUrl !== undefined ? { imageUrl: payload.imageUrl } : {}),
     updatedAt: new Date().toISOString(),
   });

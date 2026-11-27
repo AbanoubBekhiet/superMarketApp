@@ -23,6 +23,7 @@ import { EmptyState } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useProducts } from '@/features/products/hooks/useProducts';
 import { updateProfileInfo } from '@/features/profile/api/profileApi';
+import { NotificationCardItem } from '@/features/profile/components/NotificationCardItem';
 import {
   useAddAddress,
   useAddresses,
@@ -404,20 +405,12 @@ export function ProfileScreen() {
             ) : null}
 
             {modal === 'notifications' ? (
-              <ScrollView contentContainerClassName="gap-sm">
-                {notifications.map((n) => (
-                  <View
-                    key={n.id}
-                    className="p-md rounded-lg border border-outline-subtle bg-surface gap-xs"
-                  >
-                    <Text className="font-title text-title-sm text-on-surface text-right">
-                      {n.title}
-                    </Text>
-                    <Text className="font-body text-body-sm text-on-surface-muted text-right">
-                      {n.body}
-                    </Text>
-                  </View>
-                ))}
+              <ScrollView contentContainerClassName="gap-sm pb-sm" showsVerticalScrollIndicator={false}>
+                {notifications.length === 0 ? (
+                  <EmptyState title={STRINGS.common.noNotifications} />
+                ) : (
+                  notifications.map((n) => <NotificationCardItem key={n.id} notification={n} />)
+                )}
               </ScrollView>
             ) : null}
 

@@ -16,20 +16,23 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { BrandSplash } from '@/components/ui/BrandSplash';
 import { AppErrorBoundary } from '@/components/ui/StateViews';
 import { ToastBanner } from '@/components/ui/ToastBanner';
 import { useNotifications } from '@/features/profile/hooks/useProfile';
 import {
   attachNotificationTapListener,
   configureNotifications,
+  presentLocalNotification,
   registerDevicePushToken,
 } from '@/lib/notifications';
 import { queryClient } from '@/lib/queryClient';
 import { ensureForcedRtl } from '@/lib/rtl';
 import { firestoreDb } from '@/services/firebase/app';
+import { oneSignalService } from '@/services/onesignal/client';
 import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
@@ -125,7 +128,10 @@ function LiveNotificationWatcher() {
 
     if (unseenNew.length > 0) {
       const latest = unseenNew[0];
-      showToast(`${latest.title}: ${latest.body}`);
+      showToast(latest.body, 'success', { title: latest.title, kind: 'notification' });
+      if (!oneSignalService.isAvailable()) {
+        void presentLocalNotification(latest.title, latest.body, latest.dataPayload ?? undefined);
+      }
       void qc.invalidateQueries({ queryKey: ['orders'] });
       void qc.invalidateQueries({ queryKey: ['products'] });
       void qc.invalidateQueries({ queryKey: ['banners'] });
@@ -151,6 +157,11 @@ export default function RootLayout() {
   const hydrate = useAuthStore((s) => s.hydrate);
   const isHydrated = useAuthStore((s) => s.isHydrated);
   const currentUser = useAuthStore((s) => s.user);
+  const [splashDone, setSplashDone] = useState(false);
+
+  const handleSplashFinish = useCallback(() => {
+    setSplashDone(true);
+  }, []);
 
   useEffect(() => {
     hydrate();
@@ -190,6 +201,7 @@ export default function RootLayout() {
               <Stack.Screen name="(admin)" />
             </Stack>
             <ToastBanner />
+            {!splashDone ? <BrandSplash onFinish={handleSplashFinish} /> : null}
           </AppErrorBoundary>
         </QueryClientProvider>
       </SafeAreaProvider>

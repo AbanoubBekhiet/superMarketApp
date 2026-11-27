@@ -1,10 +1,9 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowUpDown, Search, SlidersHorizontal, X } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Search, X } from 'lucide-react-native';
+import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FilterChip } from '@/components/ui/Chip';
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui/StateViews';
 import { STRINGS } from '@/constants/strings';
 import { useCategories } from '@/features/categories/hooks/useCategories';
@@ -15,8 +14,6 @@ import { useUiStore } from '@/store/uiStore';
 import { colors } from '@/theme/tokens';
 import type { Product } from '@/types/domain';
 
-type SortMode = 'default' | 'price_asc' | 'price_desc' | 'offers';
-
 export function CategoriesScreen() {
   const params = useLocalSearchParams<{ categoryId?: string }>();
   const { data: categories = [] } = useCategories();
@@ -24,22 +21,27 @@ export function CategoriesScreen() {
   const [selection, setSelection] = useState<{
     paramId?: string;
     categoryId: string;
-    subcategoryId: string;
   } | null>(null);
   const selectedCategoryId =
     selection && selection.paramId === params.categoryId
       ? selection.categoryId
       : (params.categoryId ?? categories[0]?.id ?? '');
-  const selectedSubcategoryId =
-    selection && selection.paramId === params.categoryId ? selection.subcategoryId : 'all';
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<SortMode>('default');
-  const [sortModalOpen, setSortModalOpen] = useState(false);
-  const [offersOnly, setOffersOnly] = useState(false);
 
   const showToast = useUiStore((s) => s.showToast);
   const pendingCategoryToastRef = useRef<string | null>(null);
+  const scrollViewRef = useRef<ComponentRef<typeof ScrollView> | null>(null);
+  const productsSectionYRef = useRef(0);
+
+  const scrollToProducts = useCallback(() => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(0, productsSectionYRef.current - 8),
+        animated: true,
+      });
+    }, 80);
+  }, []);
 
   const activeCategory =
     categories.find((c) => c.id === selectedCategoryId) ?? categories[0];
@@ -52,9 +54,7 @@ export function CategoriesScreen() {
     refetch,
   } = useProducts({
     categoryId: activeCategory?.id,
-    subcategoryId: selectedSubcategoryId,
     search: search.trim() || undefined,
-    sort,
   });
 
   useEffect(() => {
@@ -65,9 +65,11 @@ export function CategoriesScreen() {
     }
   }, [activeCategory?.id, isFetching, isLoading, showToast]);
 
-  const displayedProducts = offersOnly
-    ? products.filter((p) => Boolean(p.discountPercent || p.oldPrice))
-    : products;
+  useEffect(() => {
+    if (params.categoryId) {
+      scrollToProducts();
+    }
+  }, [params.categoryId, scrollToProducts]);
 
   const categoryRows: typeof categories[] = [];
   const activeCategories = categories.filter((c) => c.isActive);
@@ -76,8 +78,8 @@ export function CategoriesScreen() {
   }
 
   const productRows: Product[][] = [];
-  for (let i = 0; i < displayedProducts.length; i += 2) {
-    productRows.push(displayedProducts.slice(i, i + 2));
+  for (let i = 0; i < products.length; i += 2) {
+    productRows.push(products.slice(i, i + 2));
   }
 
   return (
@@ -102,6 +104,7 @@ export function CategoriesScreen() {
       </View>
 
       <ScrollView
+        ref={scrollViewRef}
         contentContainerClassName="px-page-x pt-base pb-xl gap-section"
         showsVerticalScrollIndicator={false}
       >
@@ -136,9 +139,9 @@ export function CategoriesScreen() {
                         setSelection({
                           paramId: params.categoryId,
                           categoryId: cat.id,
-                          subcategoryId: 'all',
                         });
                       }
+                      scrollToProducts();
                     }}
                     className={`flex-1 bg-mint-surface rounded-lg p-sm items-center gap-xs ${
                       isSelected ? 'border-2 border-primary' : 'border border-outline'
@@ -170,78 +173,23 @@ export function CategoriesScreen() {
           ))}
         </View>
 
-        {/* Filtered Category View */}
-        <View className="gap-md">
-          <View className="flex-row items-center justify-between gap-sm">
-            <Text className="font-headline text-title-lg text-on-surface">
-              {activeCategory?.name ?? STRINGS.categories.title}
-            </Text>
-            <View className="flex-row items-center gap-xs">
-              <Pressable
-                onPress={() => setSortModalOpen(true)}
-                className="flex-row items-center gap-xs px-md py-xs rounded-md bg-surface-card border border-outline-subtle active:border-primary"
-              >
-                <ArrowUpDown size={16} color={colors.primary} />
-                <Text className="font-label text-label-md text-on-surface">
-                  {STRINGS.categories.sortLabel}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setOffersOnly((prev) => !prev)}
-                className={`flex-row items-center gap-xs px-md py-xs rounded-md border ${
-                  offersOnly
-                    ? 'bg-mint-surface border-primary'
-                    : 'bg-surface-card border-outline-subtle'
-                }`}
-              >
-                <SlidersHorizontal size={16} color={colors.primary} />
-                <Text className="font-label text-label-md text-on-surface">
-                  {STRINGS.categories.filterLabel}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Subcategory Chips */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerClassName="gap-sm pb-xs"
-          >
-            <FilterChip
-              label={STRINGS.common.all}
-              active={selectedSubcategoryId === 'all'}
-              onPress={() =>
-                setSelection({
-                  paramId: params.categoryId,
-                  categoryId: selectedCategoryId,
-                  subcategoryId: 'all',
-                })
-              }
-            />
-            {(activeCategory?.subcategories ?? []).map((sub) => (
-              <FilterChip
-                key={sub.id}
-                label={sub.name}
-                active={selectedSubcategoryId === sub.id}
-                onPress={() =>
-                  setSelection({
-                    paramId: params.categoryId,
-                    categoryId: selectedCategoryId,
-                    subcategoryId: sub.id,
-                  })
-                }
-              />
-            ))}
-          </ScrollView>
+        {/* Selected Category Products */}
+        <View
+          className="gap-md"
+          onLayout={(e) => {
+            productsSectionYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <Text className="font-headline text-title-lg text-on-surface text-right">
+            {activeCategory?.name ?? STRINGS.categories.title}
+          </Text>
 
           {/* Products Grid */}
           {isLoading ? (
             <ListSkeleton count={2} />
           ) : isError ? (
             <ErrorState onRetry={refetch} />
-          ) : displayedProducts.length === 0 ? (
+          ) : products.length === 0 ? (
             <EmptyState />
           ) : (
             <View className="gap-md">
@@ -255,53 +203,6 @@ export function CategoriesScreen() {
           )}
         </View>
       </ScrollView>
-
-      {/* Sort Modal */}
-      <Modal
-        visible={sortModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSortModalOpen(false)}
-      >
-        <Pressable
-          className="flex-1 bg-on-surface/40 justify-end"
-          onPress={() => setSortModalOpen(false)}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            className="bg-surface-card rounded-t-xl p-lg gap-sm border-t border-outline-subtle"
-          >
-            <Text className="font-headline text-title-lg text-on-surface text-right pb-xs">
-              {STRINGS.categories.sortLabel}
-            </Text>
-            {(
-              [
-                ['default', STRINGS.categories.sortOptions.default],
-                ['price_asc', STRINGS.categories.sortOptions.priceAsc],
-                ['price_desc', STRINGS.categories.sortOptions.priceDesc],
-                ['offers', STRINGS.categories.sortOptions.offers],
-              ] as const
-            ).map(([key, label]) => (
-              <Pressable
-                key={key}
-                onPress={() => {
-                  setSort(key);
-                  setSortModalOpen(false);
-                }}
-                className={`p-md rounded-md border ${
-                  sort === key
-                    ? 'bg-mint-surface border-primary'
-                    : 'bg-surface border-outline-subtle'
-                }`}
-              >
-                <Text className="font-label text-label-md text-on-surface text-right">
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </Pressable>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
   );
 }

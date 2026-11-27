@@ -97,7 +97,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             customerArea: hydratedUser.area,
           });
           set({ user: hydratedUser, token, isHydrated: true });
-          void initializeAndLoginOneSignal(fbUser.uid);
+          const isStaff = profile.role === 'admin' || profile.role === 'sub_admin';
+          void initializeAndLoginOneSignal(fbUser.uid, isStaff);
         } catch {
           await firebaseSignOut(firebaseAuth).catch(() => undefined);
           await deleteToken();

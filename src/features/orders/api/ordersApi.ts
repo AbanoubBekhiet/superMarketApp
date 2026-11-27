@@ -10,6 +10,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
+import { dispatchStaffOneSignalPush } from '@/lib/notifications';
 import { firebaseAuth, firestoreDb } from '@/services/firebase/app';
 import {
   mapOrder,
@@ -100,10 +101,10 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
   const createdOrderData = await runTransaction(firestoreDb, async (tx) => {
     const counterSnap = await tx.get(counterRef);
     const prevNumber = counterSnap.exists()
-      ? ((counterSnap.data() as { lastNumber?: number }).lastNumber ?? 10422)
-      : 10422;
+      ? ((counterSnap.data() as { lastNumber?: number }).lastNumber ?? 0)
+      : 0;
     const orderNumber = prevNumber + 1;
-    const code = `طز-${orderNumber}`;
+    const code = `ORD-${orderNumber}`;
 
     let subtotal = 0;
     const resolvedItems: NonNullable<FirestoreOrderDoc['items']> = [];
@@ -275,16 +276,25 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   });
 
   if (current.userId) {
+    const title = 'تحديث حالة الطلب';
+    const body = `تم تحديث حالة طلبك رقم ${current.code}.`;
     await addDoc(collection(firestoreDb, 'notifications'), {
       userId: current.userId,
       targetRole: null,
-      title: 'تحديث حالة الطلب',
-      body: `تم تحديث حالة طلبك رقم ${current.code}.`,
+      title,
+      body,
       type: 'order_update',
       dataPayload: JSON.stringify({ orderId, status }),
       isRead: false,
       createdAt: now,
     }).catch(() => undefined);
+
+    void dispatchStaffOneSignalPush({
+      title,
+      body,
+      externalIds: [current.userId],
+      data: { orderId, status },
+    });
   }
 
   return mapOrder(orderId, {

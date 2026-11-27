@@ -3,8 +3,11 @@ import { router } from 'expo-router';
 import { Bell, ChevronDown, MapPin, Search, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -46,6 +49,7 @@ interface PromoSlide {
 }
 
 const BANNER_VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 55 };
+const HOME_PRODUCTS_PAGE_SIZE = 24;
 
 function PaginationDot({ active }: { active: boolean }) {
   const [widthAnim] = useState(() => new Animated.Value(active ? 24 : 8));
@@ -104,6 +108,7 @@ export function HomeScreen() {
   const [notifModalOpen, setNotifModalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(HOME_PRODUCTS_PAGE_SIZE);
 
   const bannerListRef = useRef<FlatList<PromoSlide> | null>(null);
   const isDraggingBannerRef = useRef(false);
@@ -125,8 +130,26 @@ export function HomeScreen() {
   const defaultAddress = addresses.find((a) => a.isDefault) ?? addresses[0];
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const dailyOffers = products.filter((p) => p.isDailyOffer);
-  const bestSellers = products.filter((p) => p.isBestSeller);
+  const bestSellers = useMemo(
+    () =>
+      [...products].sort(
+        (a, b) => Number(Boolean(b.isBestSeller)) - Number(Boolean(a.isBestSeller)),
+      ),
+    [products],
+  );
+  const visibleBestSellers = bestSellers.slice(0, visibleCount);
+  const hasMoreBestSellers = visibleBestSellers.length < bestSellers.length;
+
+  const handleHomeScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!hasMoreBestSellers || search.trim().length > 0) return;
+      const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+      if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 420) {
+        setVisibleCount((prev) => Math.min(bestSellers.length, prev + HOME_PRODUCTS_PAGE_SIZE));
+      }
+    },
+    [bestSellers.length, hasMoreBestSellers, search],
+  );
 
   const promoSlides = useMemo<PromoSlide[]>(() => {
     const bannerProductIds = new Set(
@@ -262,6 +285,8 @@ export function HomeScreen() {
       <ScrollView
         contentContainerClassName="px-page-x pt-base pb-xl gap-section"
         showsVerticalScrollIndicator={false}
+        onScroll={handleHomeScroll}
+        scrollEventThrottle={120}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -523,35 +548,24 @@ export function HomeScreen() {
             ) : isError ? (
               <ErrorState onRetry={refetch} />
             ) : (
-              <>
-                <View className="gap-md">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="font-headline text-title-lg text-on-surface">
-                      {STRINGS.home.dailyOffersTitle}
+              <View className="gap-md">
+                <View className="flex-row items-center justify-between">
+                  <Text className="font-headline text-title-lg text-on-surface">
+                    {STRINGS.home.bestSellersTitle}
+                  </Text>
+                  <Pressable onPress={() => router.push('/(user)/(tabs)/categories')}>
+                    <Text className="font-label text-label-md text-primary">
+                      {STRINGS.common.more}
                     </Text>
-                    <Pressable onPress={() => router.push('/(user)/(tabs)/categories')}>
-                      <Text className="font-label text-label-md text-primary">
-                        {STRINGS.common.more}
-                      </Text>
-                    </Pressable>
-                  </View>
-                  <ProductTwoColumnGrid items={dailyOffers} />
+                  </Pressable>
                 </View>
-
-                <View className="gap-md">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="font-headline text-title-lg text-on-surface">
-                      {STRINGS.home.bestSellersTitle}
-                    </Text>
-                    <Pressable onPress={() => router.push('/(user)/(tabs)/categories')}>
-                      <Text className="font-label text-label-md text-primary">
-                        {STRINGS.common.more}
-                      </Text>
-                    </Pressable>
+                <ProductTwoColumnGrid items={visibleBestSellers} />
+                {hasMoreBestSellers ? (
+                  <View className="py-sm items-center">
+                    <ActivityIndicator size="small" color={colors.primary} />
                   </View>
-                  <ProductTwoColumnGrid items={bestSellers} />
-                </View>
-              </>
+                ) : null}
+              </View>
             )}
           </>
         )}
