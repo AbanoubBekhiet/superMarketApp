@@ -179,7 +179,7 @@ export async function registerMobile(payload: RegisterPayload): Promise<AuthSess
 
     const token = await credential.user.getIdToken();
     void registerDevicePushToken(false, uid);
-    void dispatchCustomerStaffAlertPush({ kind: 'new_customer' });
+    await dispatchCustomerStaffAlertPush({ kind: 'new_customer', idToken: token });
 
     return {
       token,

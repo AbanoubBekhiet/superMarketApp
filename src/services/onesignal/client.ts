@@ -39,6 +39,7 @@ class OneSignalService {
   private initializedAppId: string | null = null;
   private permissionRequested = false;
   private subscriptionObserverAttached = false;
+  private currentExternalUserId: string | null = null;
   private currentRole: 'customer' | 'staff' | null = null;
 
   public isAvailable(): boolean {
@@ -110,6 +111,9 @@ class OneSignalService {
     OneSignal.User.pushSubscription.addEventListener(
       'change',
       (subscription: PushSubscriptionChangedState) => {
+        if (this.currentExternalUserId) {
+          OneSignal.login(this.currentExternalUserId);
+        }
         if (this.currentRole) {
           OneSignal.User.addTag('role', this.currentRole);
         }
@@ -122,6 +126,7 @@ class OneSignalService {
 
   public login(externalUserId: string, role?: 'customer' | 'staff'): void {
     if (!externalUserId) return;
+    this.currentExternalUserId = externalUserId;
     if (role) {
       this.currentRole = role;
     }
@@ -138,6 +143,7 @@ class OneSignalService {
   }
 
   public logout(): void {
+    this.currentExternalUserId = null;
     this.currentRole = null;
     const pkg = loadOneSignalPackage();
     pkg?.OneSignal.User.removeTag('role');

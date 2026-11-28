@@ -157,23 +157,34 @@ export async function presentLocalNotification(
 export async function dispatchCustomerStaffAlertPush(params: {
   kind: 'new_customer' | 'new_order';
   orderId?: string;
+  idToken?: string;
 }): Promise<void> {
   const baseUrl = env.r2UploadUrl.trim().replace(/\/+$/, '');
-  const idToken = await firebaseAuth.currentUser?.getIdToken().catch(() => null);
+  const idToken = params.idToken || (await firebaseAuth.currentUser?.getIdToken().catch(() => null));
   if (!baseUrl || !idToken) return;
 
-  await fetch(`${baseUrl}/push/staff-alert`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({
-      kind: params.kind,
-      ...(params.orderId ? { orderId: params.orderId } : {}),
-      appId: env.onesignalAppId.trim(),
-    }),
-  }).catch(() => undefined);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    await fetch(`${baseUrl}/push/staff-alert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        kind: params.kind,
+        ...(params.orderId ? { orderId: params.orderId } : {}),
+        appId: env.onesignalAppId.trim(),
+      }),
+      signal: controller.signal,
+    });
+  } catch {
+    // Non-blocking push trigger
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function dispatchStaffOneSignalPush(params: {

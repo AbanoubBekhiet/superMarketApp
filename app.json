@@ -2,7 +2,7 @@
   "expo": {
     "name": "tazag",
     "slug": "supermarketapp",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "tazag",
@@ -35,7 +35,14 @@
       [
         "onesignal-expo-plugin",
         {
-          "mode": "production"
+          "mode": "production",
+          "smallIcons": [
+            "./assets/images/notification-icon.png"
+          ],
+          "largeIcons": [
+            "./assets/images/notification-large-icon.png"
+          ],
+          "smallIconAccentColor": "#5C7057"
         }
       ],
       "expo-router",
@@ -71,7 +78,13 @@
           "photosPermission": "يحتاج تطبيق طازج إلى الوصول للصور لرفع صور المنتجات والأقسام."
         }
       ],
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#5C7057"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

@@ -299,12 +299,11 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       isRead: false,
       createdAt: now,
     }).catch(() => undefined),
+    dispatchCustomerStaffAlertPush({
+      kind: 'new_order',
+      orderId: orderRef.id,
+    }),
   ]);
-
-  void dispatchCustomerStaffAlertPush({
-    kind: 'new_order',
-    orderId: orderRef.id,
-  });
 
   return mapOrder(orderRef.id, createdOrderData);
 }
