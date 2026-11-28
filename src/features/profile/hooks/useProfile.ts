@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { firestoreDb } from '@/services/firebase/app';
+import { mapNotification, type FirestoreNotificationDoc } from '@/services/firebase/mappers';
 import { useAuthStore } from '@/store/authStore';
 import {
   addAddress,
@@ -117,7 +118,7 @@ export function useNotifications() {
     if (!userId) return undefined;
 
     const isStaff = role === 'admin' || role === 'sub_admin';
-    const q = isStaff
+    const primaryQuery = isStaff
       ? query(
           collection(firestoreDb, 'notifications'),
           where('targetRole', '==', 'staff'),
@@ -131,15 +132,47 @@ export function useNotifications() {
           limit(40),
         );
 
+    const fallbackQuery = isStaff
+      ? query(collection(firestoreDb, 'notifications'), where('targetRole', '==', 'staff'))
+      : query(collection(firestoreDb, 'notifications'), where('userId', '==', userId));
+
+    let fallbackUnsub: (() => void) | null = null;
     const unsubscribe = onSnapshot(
-      q,
-      () => {
-        void qc.invalidateQueries({ queryKey: [...profileKeys.notifications, userId] });
+      primaryQuery,
+      (snap) => {
+        if (isStaff) {
+          const items = snap.docs.map((d) =>
+            mapNotification(d.id, d.data() as FirestoreNotificationDoc),
+          );
+          qc.setQueryData([...profileKeys.notifications, userId], items);
+        } else {
+          void qc.invalidateQueries({ queryKey: [...profileKeys.notifications, userId] });
+        }
       },
-      () => undefined,
+      () => {
+        if (fallbackUnsub) return;
+        fallbackUnsub = onSnapshot(
+          fallbackQuery,
+          (snap) => {
+            if (isStaff) {
+              const items = snap.docs
+                .map((d) => mapNotification(d.id, d.data() as FirestoreNotificationDoc))
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .slice(0, 40);
+              qc.setQueryData([...profileKeys.notifications, userId], items);
+            } else {
+              void qc.invalidateQueries({ queryKey: [...profileKeys.notifications, userId] });
+            }
+          },
+          () => undefined,
+        );
+      },
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      fallbackUnsub?.();
+    };
   }, [qc, role, userId]);
 
   return useQuery({

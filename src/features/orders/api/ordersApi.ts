@@ -10,7 +10,10 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { dispatchStaffOneSignalPush } from '@/lib/notifications';
+import {
+  dispatchCustomerStaffAlertPush,
+  dispatchStaffOneSignalPush,
+} from '@/lib/notifications';
 import { firebaseAuth, firestoreDb } from '@/services/firebase/app';
 import {
   mapOrder,
@@ -297,6 +300,11 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       createdAt: now,
     }).catch(() => undefined),
   ]);
+
+  void dispatchCustomerStaffAlertPush({
+    kind: 'new_order',
+    orderId: orderRef.id,
+  });
 
   return mapOrder(orderRef.id, createdOrderData);
 }

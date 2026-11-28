@@ -39,6 +39,7 @@ class OneSignalService {
   private initializedAppId: string | null = null;
   private permissionRequested = false;
   private subscriptionObserverAttached = false;
+  private currentRole: 'customer' | 'staff' | null = null;
 
   public isAvailable(): boolean {
     return loadOneSignalPackage() !== null;
@@ -109,6 +110,9 @@ class OneSignalService {
     OneSignal.User.pushSubscription.addEventListener(
       'change',
       (subscription: PushSubscriptionChangedState) => {
+        if (this.currentRole) {
+          OneSignal.User.addTag('role', this.currentRole);
+        }
         if (subscription.current.token && !subscription.current.optedIn) {
           OneSignal.User.pushSubscription.optIn();
         }
@@ -118,6 +122,9 @@ class OneSignalService {
 
   public login(externalUserId: string, role?: 'customer' | 'staff'): void {
     if (!externalUserId) return;
+    if (role) {
+      this.currentRole = role;
+    }
     const pkg = loadOneSignalPackage();
     if (!pkg) return;
 
@@ -131,7 +138,9 @@ class OneSignalService {
   }
 
   public logout(): void {
+    this.currentRole = null;
     const pkg = loadOneSignalPackage();
+    pkg?.OneSignal.User.removeTag('role');
     pkg?.OneSignal.logout();
   }
 

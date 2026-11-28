@@ -198,15 +198,25 @@ export async function fetchNotifications(): Promise<NotificationItem[]> {
   if (!uid) return [];
 
   if (user?.role === 'admin' || user?.role === 'sub_admin') {
-    const snap = await getDocs(
-      query(
-        collection(firestoreDb, 'notifications'),
-        where('targetRole', '==', 'staff'),
-        orderBy('createdAt', 'desc'),
-        limit(40),
-      ),
-    );
-    return snap.docs.map((d) => mapNotification(d.id, d.data() as FirestoreNotificationDoc));
+    try {
+      const snap = await getDocs(
+        query(
+          collection(firestoreDb, 'notifications'),
+          where('targetRole', '==', 'staff'),
+          orderBy('createdAt', 'desc'),
+          limit(40),
+        ),
+      );
+      return snap.docs.map((d) => mapNotification(d.id, d.data() as FirestoreNotificationDoc));
+    } catch {
+      const fallbackSnap = await getDocs(
+        query(collection(firestoreDb, 'notifications'), where('targetRole', '==', 'staff')),
+      );
+      return fallbackSnap.docs
+        .map((d) => mapNotification(d.id, d.data() as FirestoreNotificationDoc))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 40);
+    }
   }
 
   const [personalSnap, globalSnap] = await Promise.all([

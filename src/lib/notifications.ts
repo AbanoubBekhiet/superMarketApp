@@ -39,6 +39,11 @@ function handleNotificationRoute(data?: Record<string, unknown>): void {
   const isStaff = role === 'admin' || role === 'sub_admin';
   const orderId = data?.orderId;
 
+  if (isStaff && data?.kind === 'new_customer') {
+    router.push('/(admin)/customers');
+    return;
+  }
+
   if (isStaff && (data?.kind === 'new_order' || typeof orderId === 'string')) {
     router.push('/(admin)/orders');
     return;
@@ -147,6 +152,28 @@ export async function presentLocalNotification(
   } catch {
     // Non-blocking fallback when local notifications are unavailable
   }
+}
+
+export async function dispatchCustomerStaffAlertPush(params: {
+  kind: 'new_customer' | 'new_order';
+  orderId?: string;
+}): Promise<void> {
+  const baseUrl = env.r2UploadUrl.trim().replace(/\/+$/, '');
+  const idToken = await firebaseAuth.currentUser?.getIdToken().catch(() => null);
+  if (!baseUrl || !idToken) return;
+
+  await fetch(`${baseUrl}/push/staff-alert`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      kind: params.kind,
+      ...(params.orderId ? { orderId: params.orderId } : {}),
+      appId: env.onesignalAppId.trim(),
+    }),
+  }).catch(() => undefined);
 }
 
 export async function dispatchStaffOneSignalPush(params: {

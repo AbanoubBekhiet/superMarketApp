@@ -4,7 +4,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { addDoc, collection, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { registerDevicePushToken } from '@/lib/notifications';
+import { dispatchCustomerStaffAlertPush, registerDevicePushToken } from '@/lib/notifications';
 import { normalizePhoneNumber, phoneToAuthEmail, sanitizePublicEmail } from '@/lib/phoneAuth';
 import { firebaseAuth, firestoreDb } from '@/services/firebase/app';
 import type { FirestoreUserDoc } from '@/services/firebase/mappers';
@@ -179,6 +179,7 @@ export async function registerMobile(payload: RegisterPayload): Promise<AuthSess
 
     const token = await credential.user.getIdToken();
     void registerDevicePushToken(false, uid);
+    void dispatchCustomerStaffAlertPush({ kind: 'new_customer' });
 
     return {
       token,

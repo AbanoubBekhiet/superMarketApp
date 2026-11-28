@@ -45,7 +45,7 @@ function LiveNotificationWatcher() {
   const user = useAuthStore((s) => s.user);
   const showToast = useUiStore((s) => s.showToast);
   const qc = useQueryClient();
-  const { data: notifications = [] } = useNotifications();
+  const { data: notifications = [], isFetched } = useNotifications();
   const seenIdsRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
@@ -115,7 +115,7 @@ function LiveNotificationWatcher() {
   }, [qc]);
 
   useEffect(() => {
-    if (!user?.id || notifications.length === 0) return;
+    if (!user?.id || !isFetched) return;
     if (seenIdsRef.current === null) {
       seenIdsRef.current = new Set(notifications.map((n) => n.id));
       return;
@@ -136,9 +136,10 @@ function LiveNotificationWatcher() {
       void qc.invalidateQueries({ queryKey: ['products'] });
       void qc.invalidateQueries({ queryKey: ['banners'] });
       void qc.invalidateQueries({ queryKey: ['customers'] });
+      void qc.invalidateQueries({ queryKey: ['active-carts'] });
       void qc.invalidateQueries({ queryKey: ['admin'] });
     }
-  }, [notifications, qc, showToast, user?.id]);
+  }, [isFetched, notifications, qc, showToast, user?.id]);
 
   return null;
 }
